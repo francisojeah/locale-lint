@@ -1,0 +1,45 @@
+{
+  "name": "locale-lint",
+  "version": "1.0.0",
+  "description": "Zero-config i18n linter for React, React Native & Next.js — detects missing, unused, undefined keys and hardcoded strings",
+  "main": "dist/cli.js",
+  "bin": {
+    "locale-lint": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/cli.ts",
+    "check": "ts-node src/cli.ts check",
+    "lint": "ts-node src/cli.ts check --src example/src --locales example/locales"
+  },
+  "keywords": [
+    "i18n",
+    "internationalization",
+    "localization",
+    "lint",
+    "translation",
+    "react",
+    "react-native",
+    "nextjs",
+    "i18next",
+    "missing-keys",
+    "unused-keys",
+    "hardcoded-strings"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/parser": "^7.23.0",
+    "@babel/traverse": "^7.23.0",
+    "@babel/types": "^7.23.0",
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "glob": "^10.3.10"
+  },
+  "devDependencies": {
+    "@types/babel__traverse": "^7.20.4",
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.2"
+  }
+}

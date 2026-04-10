@@ -1,0 +1,40 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading...",
+    "error": "Something went wrong"
+  },
+  "auth": {
+    "login": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to your account",
+      "emailLabel": "Email address",
+      "passwordLabel": "Password",
+      "submitButton": "Sign in",
+      "forgotPassword": "Forgot your password?",
+      "noAccount": "Don't have an account?",
+      "signupLink": "Sign up"
+    },
+    "signup": {
+      "title": "Create account",
+      "submitButton": "Get started"
+    }
+  },
+  "home": {
+    "title": "Dashboard",
+    "welcome": "Hello {{name}}, welcome back!",
+    "lastSeen": "Last seen {{date}}",
+    "oldWidget": "This feature is deprecated",
+    "stats": {
+      "total": "Total items",
+      "active": "Active",
+      "pending": "Pending"
+    }
+  },
+  "profile": {
+    "title": "My Profile",
+    "editButton": "Edit profile",
+    "bio": "Bio"
+  }
+}

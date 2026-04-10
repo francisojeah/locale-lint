@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# logs
+*.log
+
+# environment variables
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+
+# TypeScript
+*.tsbuildinfo
+
+# package artifacts
+*.tgz

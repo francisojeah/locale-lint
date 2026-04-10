@@ -1,0 +1,37 @@
+{
+  "common": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "loading": "Carregando...",
+    "error": "Algo deu errado"
+  },
+  "auth": {
+    "login": {
+      "title": "Bem-vindo de volta",
+      "subtitle": "Entre na sua conta",
+      "emailLabel": "Endereço de email",
+      "passwordLabel": "Senha",
+      "submitButton": "Entrar",
+      "forgotPassword": "Esqueceu sua senha?"
+    },
+    "signup": {
+      "title": "Criar conta",
+      "submitButton": "Começar"
+    }
+  },
+  "home": {
+    "title": "Painel",
+    "welcome": "Olá {nome}, bem-vindo de volta!",
+    "lastSeen": "Visto por último em {{date}}",
+    "stats": {
+      "total": "Total de itens",
+      "active": "Ativo",
+      "pending": "Pendente"
+    }
+  },
+  "profile": {
+    "title": "Meu Perfil",
+    "editButton": "Editar perfil",
+    "bio": "Bio"
+  }
+}
