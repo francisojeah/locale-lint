@@ -1,6 +1,6 @@
 {
   "name": "locale-lint",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Zero-config i18n linter for React, React Native & Next.js — detects missing, unused, undefined keys and hardcoded strings",
   "main": "dist/cli.js",
   "bin": {
