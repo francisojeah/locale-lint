@@ -143,8 +143,9 @@ locale-lint exits with code `1` when issues are found — drop it straight into 
 - run: npx locale-lint check
 ```
 
+Or add to your `package.json` scripts:
+
 ```json
-// package.json
 "scripts": {
   "i18n:check": "locale-lint check"
 }
