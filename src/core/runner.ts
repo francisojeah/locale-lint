@@ -1,3 +1,5 @@
+import path from "path";
+import chalk from "chalk";
 import type { LocaleLintConfig, LintResult } from "../types/index";
 import { scanFiles } from "./scanFiles";
 import { extractKeysFromFile, deduplicateKeys } from "./extractKeys";
@@ -5,59 +7,87 @@ import { detectHardcodedStrings } from "./detectHardcoded";
 import { loadLocales } from "./loadLocales";
 import { compareLocales } from "./compareLocales";
 
-/**
- * Main lint pipeline — runs all checks and returns a unified LintResult.
- *
- * Steps:
- *   1. Load and flatten all locale files
- *   2. Scan source files for t('key') calls
- *   3. Scan JSX files for hardcoded strings
- *   4. Compare keys across locales and against code usage
- */
-export async function runLint(config: LocaleLintConfig, cwd: string): Promise<LintResult> {
+export async function runLint(
+  config: LocaleLintConfig,
+  cwd: string,
+): Promise<LintResult> {
   const startTime = Date.now();
 
-  // ── Step 1: Load locale files ──────────────────────────────────────────────
+  // Step 1: Load locale files
   const locales = loadLocales(config.locales);
 
   if (locales.length === 0) {
     throw new Error(`No locale files found in: ${config.locales}`);
   }
 
-  // ── Step 2: Scan source files ──────────────────────────────────────────────
+  // Detect if keys are wrongly prefixed with locale names (e.g. "en.auth.login")
+  // This happens when auto-detect picks a parent folder instead of the translations folder
+  const allKeys = locales.flatMap((l) => Object.keys(l.keys));
+  const localePrefixes = locales.map((l) => `${l.locale}.`);
+  const suspiciousKeys = allKeys.filter((k) =>
+    localePrefixes.some((prefix) => k.startsWith(prefix)),
+  );
+  if (allKeys.length > 0 && suspiciousKeys.length > allKeys.length * 0.2) {
+    const detectedDir = path.relative(cwd, config.locales);
+    console.warn(
+      chalk.yellow(
+        '\n  ⚠️  Keys are prefixed with locale names (e.g. "en.auth.login").\n',
+      ) +
+        chalk.dim("     locale-lint picked the wrong folder: ") +
+        chalk.red(detectedDir) +
+        "\n\n" +
+        chalk.dim("     Fix it permanently in 3 steps:\n") +
+        chalk.dim("       1. Run: ") +
+        chalk.cyan("npx locale-lint init\n") +
+        chalk.dim("       2. Open: ") +
+        chalk.cyan("locale-lint.config.json\n") +
+        chalk.dim("       3. Set: ") +
+        chalk.cyan(`"locales": "src/i18n/translations"\n`) +
+        chalk.dim("\n     Or pass the flag directly:\n") +
+        chalk.dim("       ") +
+        chalk.cyan(
+          `npx locale-lint check --locales ${detectedDir}/translations\n`,
+        ),
+    );
+  }
+
+  // Step 2: Scan source files
   const sourceFiles = scanFiles(config, cwd);
   const allUsedKeys = [];
   const allHardcoded = [];
 
   for (const file of sourceFiles) {
-    // Extract t('key') calls
     const keys = extractKeysFromFile(file, cwd);
     allUsedKeys.push(...keys);
 
-    // Detect hardcoded JSX strings
-    const hardcoded = detectHardcodedStrings(file, cwd, config.minHardcodedLength);
+    const hardcoded = detectHardcodedStrings(
+      file,
+      cwd,
+      config.minHardcodedLength,
+    );
     allHardcoded.push(...hardcoded);
   }
 
-  // Deduplicate used keys (keep first occurrence for location reporting)
   const usedKeysMap = deduplicateKeys(allUsedKeys);
 
-  // Remove ignored keys from the used keys map
   for (const ignored of config.ignoreKeys) {
     usedKeysMap.delete(ignored);
   }
 
-  // ── Step 3: Compare locales ────────────────────────────────────────────────
+  // Step 3: Compare locales
   const { missingKeys, unusedKeys, undefinedKeys, interpolationMismatches } =
     compareLocales(locales, usedKeysMap, config.baseLocale);
 
-  // Filter ignored keys from unused/undefined
-  const filteredUnusedKeys = unusedKeys.filter((k) => !config.ignoreKeys.includes(k));
-  const filteredUndefinedKeys = undefinedKeys.filter((k) => !config.ignoreKeys.includes(k.key));
+  const filteredUnusedKeys = unusedKeys.filter(
+    (k) => !config.ignoreKeys.includes(k),
+  );
+  const filteredUndefinedKeys = undefinedKeys.filter(
+    (k) => !config.ignoreKeys.includes(k.key),
+  );
 
-  // ── Step 4: Assemble result ────────────────────────────────────────────────
   const totalKeys = locales.find((l) => l.locale === config.baseLocale)
-    ? Object.keys(locales.find((l) => l.locale === config.baseLocale)!.keys).length
+    ? Object.keys(locales.find((l) => l.locale === config.baseLocale)!.keys)
+        .length
     : 0;
 
   return {

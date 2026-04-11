@@ -37,7 +37,10 @@ program
       });
 
       if (format === "pretty") {
-        printScanning(config.src.map((s) => path.relative(cwd, s) || s));
+        printScanning(
+          config.src.map((s) => path.relative(cwd, s) || s),
+          path.relative(cwd, config.locales),
+        );
       }
 
       // Run the lint pipeline

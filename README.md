@@ -158,6 +158,24 @@ Dynamic keys like `` t(`key.${x}`) `` are intentionally skipped — they can't b
 
 ---
 
+## Troubleshooting
+
+### Keys show `en.` or `pt.` prefix in output
+
+locale-lint picked a parent folder instead of your actual translations folder. Fix it permanently:
+
+```bash
+npx locale-lint init
+```
+
+Then open `locale-lint.config.json` and set `"locales"` to your exact translations path:
+
+```json
+{ "locales": "path/to/your/translations" }
+```
+
+---
+
 ## License
 
 MIT
