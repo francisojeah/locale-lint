@@ -2,7 +2,6 @@ import type {
   TranslationFile,
   UsedKey,
   InterpolationMismatch,
-  LintResult,
 } from "../types/index";
 import { extractInterpolationVars } from "../utils/flatten";
 
@@ -47,26 +46,41 @@ export function compareLocales(
     }
   }
 
-  // ── 2. All defined keys (across all locales) ───────────────────────────────
-  // Use base locale if available; fall back to union of all locales.
+  // ── 2. All defined keys ────────────────────────────────────────────────────
   const allDefinedKeys = new Set<string>(
     base ? Object.keys(base.keys) : locales.flatMap((l) => Object.keys(l.keys)),
   );
 
+  const allDefinedKeysArray = Array.from(allDefinedKeys);
+  const usedKeysArray = Array.from(usedKeys.keys());
+
   // ── 3. Unused Keys ─────────────────────────────────────────────────────────
-  // Keys defined in translation files but never called via t() in source code.
+  // Skip plural children (orders.productsCount.one) when the parent
+  // (orders.productsCount) is called in code — that's i18next/i18n-js
+  // pluralization. t('orders.productsCount', { count }) resolves at runtime.
   const unusedKeys: string[] = [];
   for (const key of allDefinedKeys) {
-    if (!usedKeys.has(key)) {
+    if (usedKeys.has(key)) continue;
+
+    const isPluralChild = usedKeysArray.some((usedKey) =>
+      key.startsWith(`${usedKey}.`),
+    );
+    if (!isPluralChild) {
       unusedKeys.push(key);
     }
   }
 
   // ── 4. Undefined Keys ──────────────────────────────────────────────────────
-  // Keys called via t() in source code but not defined in any locale file.
+  // A key is only truly undefined if:
+  //   a) it has no exact match in translations, AND
+  //   b) it has no children in translations (not a plural parent)
   const undefinedKeys: UsedKey[] = [];
   for (const [key, usedKey] of usedKeys) {
-    if (!allDefinedKeys.has(key)) {
+    const exactMatch = allDefinedKeys.has(key);
+    const isPluralParent = allDefinedKeysArray.some((k) =>
+      k.startsWith(`${key}.`),
+    );
+    if (!exactMatch && !isPluralParent) {
       undefinedKeys.push(usedKey);
     }
   }
