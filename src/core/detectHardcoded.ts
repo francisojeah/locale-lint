@@ -26,7 +26,19 @@ const IGNORED_TAGS = new Set([
  * Strings to always ignore regardless of content.
  * Short strings that are clearly not UI copy.
  */
-const ALWAYS_IGNORE = new Set(["...", "—", "–", "-", "|", "/", "\\", "&", "·", "•", "·"]);
+const ALWAYS_IGNORE = new Set([
+  "...",
+  "—",
+  "–",
+  "-",
+  "|",
+  "/",
+  "\\",
+  "&",
+  "·",
+  "•",
+  "·",
+]);
 
 /**
  * Detects hardcoded (non-translated) strings inside JSX text nodes.
@@ -45,7 +57,7 @@ const ALWAYS_IGNORE = new Set(["...", "—", "–", "-", "|", "/", "\\", "&", "�
 export function detectHardcodedStrings(
   filePath: string,
   cwd: string,
-  minLength = 3
+  minLength = 3,
 ): HardcodedString[] {
   // Only scan JSX files — skip plain .ts/.js without JSX
   const ext = filePath.split(".").pop() ?? "";

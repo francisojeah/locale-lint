@@ -56,10 +56,7 @@ export function extractKeysFromFile(filePath: string, cwd: string): UsedKey[] {
       let isTranslationCall = false;
 
       // Direct call: t('key')
-      if (
-        callee.type === "Identifier" &&
-        T_FUNCTION_NAMES.has(callee.name)
-      ) {
+      if (callee.type === "Identifier" && T_FUNCTION_NAMES.has(callee.name)) {
         isTranslationCall = true;
       }
 
@@ -86,9 +83,13 @@ export function extractKeysFromFile(filePath: string, cwd: string): UsedKey[] {
               p.type === "ObjectProperty" &&
               p.key.type === "Identifier" &&
               p.key.name === "id" &&
-              p.value.type === "StringLiteral"
+              p.value.type === "StringLiteral",
           );
-          if (idProp && idProp.type === "ObjectProperty" && idProp.value.type === "StringLiteral") {
+          if (
+            idProp &&
+            idProp.type === "ObjectProperty" &&
+            idProp.value.type === "StringLiteral"
+          ) {
             usedKeys.push({
               key: idProp.value.value,
               file: relPath,

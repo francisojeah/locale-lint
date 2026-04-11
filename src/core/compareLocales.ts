@@ -24,7 +24,7 @@ export interface CompareLocalesResult {
 export function compareLocales(
   locales: TranslationFile[],
   usedKeys: Map<string, UsedKey>,
-  baseLocale: string
+  baseLocale: string,
 ): CompareLocalesResult {
   const base = locales.find((l) => l.locale === baseLocale);
   const others = locales.filter((l) => l.locale !== baseLocale);
@@ -50,9 +50,7 @@ export function compareLocales(
   // ── 2. All defined keys (across all locales) ───────────────────────────────
   // Use base locale if available; fall back to union of all locales.
   const allDefinedKeys = new Set<string>(
-    base
-      ? Object.keys(base.keys)
-      : locales.flatMap((l) => Object.keys(l.keys))
+    base ? Object.keys(base.keys) : locales.flatMap((l) => Object.keys(l.keys)),
   );
 
   // ── 3. Unused Keys ─────────────────────────────────────────────────────────

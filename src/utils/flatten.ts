@@ -8,7 +8,7 @@
 export function flattenObject(
   obj: Record<string, unknown>,
   prefix = "",
-  result: Record<string, string> = {}
+  result: Record<string, string> = {},
 ): Record<string, string> {
   for (const [key, value] of Object.entries(obj)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;

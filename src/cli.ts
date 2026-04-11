@@ -88,8 +88,12 @@ program
 
     fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
     console.log();
-    console.log(`  ${chalk.green("✅")} Created ${chalk.bold("locale-lint.config.json")}`);
-    console.log(`  Edit it to customize your setup, then run ${chalk.cyan("locale-lint check")}`);
+    console.log(
+      `  ${chalk.green("✅")} Created ${chalk.bold("locale-lint.config.json")}`,
+    );
+    console.log(
+      `  Edit it to customize your setup, then run ${chalk.cyan("locale-lint check")}`,
+    );
     console.log();
   });
 

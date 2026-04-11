@@ -1,5 +1,5 @@
 // Pattern 1: Typed variable with indirect export — most common in typed RN projects
-import type { TranslationSchema } from './types'
+import type { TranslationSchema } from "./types";
 
 const en: TranslationSchema = {
   common: {
@@ -12,7 +12,7 @@ const en: TranslationSchema = {
   },
   auth: {
     login: "Sign in",
-  }
-}
+  },
+};
 
-export default en
+export default en;

@@ -132,7 +132,10 @@ function parseJsLocaleFile(filePath: string): Record<string, unknown> | null {
   return extractViaAst(content);
 }
 
-function tryRequireStripped(filePath: string, content: string): Record<string, unknown> | null {
+function tryRequireStripped(
+  filePath: string,
+  content: string,
+): Record<string, unknown> | null {
   const cleaned = content
     // Remove comments
     .replace(/\/\/.*$/gm, "")
@@ -146,7 +149,10 @@ function tryRequireStripped(filePath: string, content: string): Record<string, u
     // Strip inline type annotations: const x: Type = ...
     .replace(/:\s*(?:Readonly<)?[A-Z][A-Za-z<>,\s\[\]|&.]*>?\s*(?==)/g, "")
     // Strip typed variable annotations like `const en: Translations = {`
-    .replace(/^(const|let|var)\s+(\w+)\s*:\s*\w[\w<>,\s\[\]|&]*\s*=/gm, "$1 $2 =")
+    .replace(
+      /^(const|let|var)\s+(\w+)\s*:\s*\w[\w<>,\s\[\]|&]*\s*=/gm,
+      "$1 $2 =",
+    )
     // Normalize `export default varName` → `module.exports = varName`
     .replace(/export\s+default\s+(\w+)\s*;?\s*$/m, "module.exports = $1;")
     // Normalize `export default { ... }` → `module.exports = { ... }`
@@ -169,7 +175,11 @@ function tryRequireStripped(filePath: string, content: string): Record<string, u
   } catch {
     return null;
   } finally {
-    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -244,9 +254,10 @@ function extractViaAst(content: string): Record<string, unknown> | null {
  * Converts a Babel ObjectExpression AST node into a plain JS object.
  * Only handles string literal values (which is all we need for locale files).
  */
-function objectExpressionToPlain(
-  node: { type: string; properties: unknown[] }
-): Record<string, unknown> | null {
+function objectExpressionToPlain(node: {
+  type: string;
+  properties: unknown[];
+}): Record<string, unknown> | null {
   const result: Record<string, unknown> = {};
 
   for (const prop of node.properties) {
@@ -259,9 +270,11 @@ function objectExpressionToPlain(
     if (p.type !== "ObjectProperty") continue;
 
     const key =
-      p.key.type === "Identifier" ? p.key.name :
-      p.key.type === "StringLiteral" ? p.key.value :
-      null;
+      p.key.type === "Identifier"
+        ? p.key.name
+        : p.key.type === "StringLiteral"
+          ? p.key.value
+          : null;
 
     if (!key) continue;
 
@@ -269,7 +282,7 @@ function objectExpressionToPlain(
       result[key] = p.value.value;
     } else if (p.value.type === "ObjectExpression" && p.value.properties) {
       result[key] = objectExpressionToPlain(
-        p.value as { type: string; properties: unknown[] }
+        p.value as { type: string; properties: unknown[] },
       );
     }
   }
@@ -281,16 +294,20 @@ function objectExpressionToPlain(
  * Last-resort regex fallback for very simple translation files.
  * Works reliably when the file is plain key: "value" pairs.
  */
-function extractObjectLiteralFallback(content: string): Record<string, unknown> | null {
-  const match = content.match(/(?:export\s+default|module\.exports\s*=)\s*(\{[\s\S]*\})\s*(?:as\s+const|satisfies\s+\w+)?\s*;?\s*$/);
+function extractObjectLiteralFallback(
+  content: string,
+): Record<string, unknown> | null {
+  const match = content.match(
+    /(?:export\s+default|module\.exports\s*=)\s*(\{[\s\S]*\})\s*(?:as\s+const|satisfies\s+\w+)?\s*;?\s*$/,
+  );
   if (!match) return null;
 
   try {
     const jsonLike = match[1]
-      .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":')   // quote bare keys
-      .replace(/,\s*([}\]])/g, "$1")                  // trailing commas
-      .replace(/:\s*`([^`]*)`/g, ': "$1"')            // template literals → strings
-      .replace(/'/g, '"');                              // single → double quotes
+      .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // quote bare keys
+      .replace(/,\s*([}\]])/g, "$1") // trailing commas
+      .replace(/:\s*`([^`]*)`/g, ': "$1"') // template literals → strings
+      .replace(/'/g, '"'); // single → double quotes
     return JSON.parse(jsonLike);
   } catch {
     return null;

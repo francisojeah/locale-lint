@@ -20,9 +20,7 @@ export function ProfileCard({ name, bio }: ProfileProps) {
       <button type="button">{t("profile.editButton")}</button>
 
       {/* Hardcoded tooltip text 🚨 */}
-      <span title="Click to edit your profile details">
-        {t("profile.bio")}
-      </span>
+      <span title="Click to edit your profile details">{t("profile.bio")}</span>
 
       {/* i18n.t() style — also detected */}
     </div>

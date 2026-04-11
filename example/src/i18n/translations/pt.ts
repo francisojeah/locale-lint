@@ -10,5 +10,5 @@ export default {
   },
   auth: {
     login: "Entrar",
-  }
-} satisfies Record<string, unknown>
+  },
+} satisfies Record<string, unknown>;

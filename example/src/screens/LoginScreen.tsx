@@ -13,9 +13,7 @@ export function LoginScreen() {
       <p>{t("auth.login.subtitle")}</p>
 
       {/* Hardcoded strings — should be flagged 🚨 */}
-      <div className="hero-banner">
-        Welcome to our platform
-      </div>
+      <div className="hero-banner">Welcome to our platform</div>
 
       <label htmlFor="email">{t("auth.login.emailLabel")}</label>
       <input
