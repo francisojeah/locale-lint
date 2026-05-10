@@ -43,6 +43,9 @@ npx locale-lint check
   20 issues found in 123ms
 ```
 
+<img width="1280" height="775" alt="WhatsApp Image 2026-05-10 at 11 38 55" src="https://github.com/user-attachments/assets/91912d86-757f-4116-95db-97dd5597fd3b" />
+
+
 ---
 
 ## What it detects
