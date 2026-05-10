@@ -13,6 +13,7 @@ Zero-config i18n linter for React, React Native & Next.js. One command catches e
 npx locale-lint check
 ```
 
+<!--
 ```
   locale-lint — scanning 3 files across 2 locales
   ────────────────────────────────────────────────────────
@@ -42,9 +43,9 @@ npx locale-lint check
   ────────────────────────────────────────────────────────
   20 issues found in 123ms
 ```
+-->
 
-<img width="1280" height="775" alt="WhatsApp Image 2026-05-10 at 11 38 55" src="https://github.com/user-attachments/assets/91912d86-757f-4116-95db-97dd5597fd3b" />
-
+<img width="1280" height="775" alt="local-lint terminal output" src="https://github.com/user-attachments/assets/91912d86-757f-4116-95db-97dd5597fd3b" />
 
 ---
 
