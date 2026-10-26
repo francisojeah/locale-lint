@@ -3,25 +3,6 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
-
-### Fixed
-
-- **Source files that fail to parse are reported** (`meta.skippedFiles` in `--json`, a
-  warning in the pretty output) instead of being dropped silently.
-- **A key resolved by suffix now counts as used**, so it is no longer also reported unused.
-
-### Added
-
-- `<Trans i18nKey="…" />` and expression-free template literals (`` t(`a.b`) ``) are
-  recognised as key usages.
-- Hardcoded-string detection covers `{'text'}` children and `placeholder={'text'}`-style
-  attributes.
-
-### Changed
-
-- Each source file is parsed once, and plural-parent lookups no longer scan every key.
-
 ## 2.0.0
 
 This release hardens correctness. Two changes affect what gets reported, so the
@@ -51,6 +32,10 @@ major version is bumped.
 - **`namespaceAgnosticFiles`** config — globs of files (e.g. `["src/lib/constants/**"]`)
   that receive `t` as a parameter; a key used there is accepted on any suffix match.
 - **`--ignore-undefined`** flag to skip undefined-key detection.
+- `<Trans i18nKey="…" />` and expression-free template literals (`` t(`a.b`) ``) are
+  recognised as key usages.
+- Hardcoded-string detection covers `{'text'}` children and `placeholder={'text'}`-style
+  attributes.
 
 ### Changed
 
@@ -69,6 +54,7 @@ major version is bumped.
 - **`obj.t('key')` is only treated as a translation call for known i18n objects**
   (`i18n`, `i18next`, `I18n`, `intl`, `$i18n`), so unrelated `.t()` methods no longer
   produce false "undefined key" reports.
+- Each source file is parsed once, and plural-parent lookups no longer scan every key.
 
 ### Fixed
 
@@ -85,6 +71,9 @@ major version is bumped.
 - A malformed `locale-lint.config.json` now errors clearly instead of being ignored.
 - Auto-detection no longer crashes on a dangling symlink in a candidate directory.
 - `locale-lint init` and the runtime defaults now share the same `exclude` list.
+- **Source files that fail to parse are reported** (`meta.skippedFiles` in `--json`, a
+  warning in the pretty output) instead of being dropped silently.
+- **A key resolved by suffix now counts as used**, so it is no longer also reported unused.
 
 ## 1.0.x
 
