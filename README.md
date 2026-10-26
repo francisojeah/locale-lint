@@ -75,12 +75,6 @@ projects that don't want to be tied to one library: it runs one command over
 react-i18next, next-intl, react-intl, i18n-js and plain `t()` wrappers, with no config
 and no ESLint setup.
 
----|:---:|:---:|:---:|:---:|
-| **locale-lint** | ✅ | ✅ | No | ✅ |
-| i18next-cli | ✅ | ✅ | No | ❌ (i18next) |
-| eslint-plugin-i18next | ❌ | ✅ | ESLint | ❌ (i18next) |
-| i18n-ally | ✅ | ❌ | VS Code | ✅ |
-
 ---
 
 ## Install
