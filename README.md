@@ -6,7 +6,7 @@
 
 # locale-lint
 
-> You shipped "Welcome to our platform" to 50,000 Portuguese users. Never again.
+> Find the missing translations, dead keys and hardcoded strings before your users do.
 
 The zero-config i18n linter for **React Native, React & Next.js**. It reads your
 *code* — not just your JSON — to catch missing, extra, unused, and undefined keys,
@@ -69,16 +69,17 @@ npx locale-lint check
 
 ## Why locale-lint
 
-Most i18n tools do one slice of the job. locale-lint does the whole check in one
-zero-config command, and it works for React Native — which most tools ignore.
+If you use i18next, [`i18next-cli`](https://github.com/i18next/i18next-cli) already
+extracts keys and lints for hardcoded strings, and it is the better fit. locale-lint is for
+projects that don't want to be tied to one library: it runs one command over
+react-i18next, next-intl, react-intl, i18n-js and plain `t()` wrappers, with no config
+and no ESLint setup.
 
-| Tool | Cross-references code | Hardcoded strings | All-in-one CLI | Zero config | Not library-locked |
-|---|:---:|:---:|:---:|:---:|:---:|
-| **locale-lint** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| li18nt | ❌ (JSON only) | ❌ | ✅ | ✅ | ✅ |
-| i18next-cli | ✅ | ❌ | ✅ | ⚠️ | ❌ (i18next) |
-| eslint-plugin-i18next | ✅ | ⚠️ | ❌ (ESLint) | ❌ | ❌ (i18next) |
-| i18n-ally | ✅ | ⚠️ | ❌ (IDE only) | ⚠️ | ✅ |
+---|:---:|:---:|:---:|:---:|
+| **locale-lint** | ✅ | ✅ | No | ✅ |
+| i18next-cli | ✅ | ✅ | No | ❌ (i18next) |
+| eslint-plugin-i18next | ❌ | ✅ | ESLint | ❌ (i18next) |
+| i18n-ally | ✅ | ❌ | VS Code | ✅ |
 
 ---
 
@@ -151,7 +152,7 @@ Works with any library that uses `t('key')` or similar patterns:
 
 | Library | Call pattern | Status |
 |---|---|---|
-| react-i18next | `t('key')` | ✅ |
+| react-i18next | `t('key')`, `<Trans i18nKey>` | ✅ |
 | next-intl | `t('key')` (namespace-aware) | ✅ |
 | i18next | `i18n.t('key')` | ✅ |
 | i18n-js | `i18n.t('key')` | ✅ |
@@ -197,7 +198,9 @@ Set `"undefinedKeyResolution": "strict"` to require exact matches instead.
 ## CI Integration
 
 locale-lint exits `0` when clean, `1` when issues are found, and `2` on a fatal
-error (e.g. a locale file with a syntax error) — drop it straight into any pipeline:
+error (e.g. a locale file with a syntax error). Source files that fail to parse don't fail
+the run; they are listed in the output and in `meta.skippedFiles` — drop it straight into
+any pipeline:
 
 ```yaml
 # .github/workflows/i18n.yml
