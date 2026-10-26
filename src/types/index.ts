@@ -80,6 +80,8 @@ export interface LintResult {
   /** Scan metadata */
   meta: {
     filesScanned: number;
+    /** Source files that failed to parse and were not analysed */
+    skippedFiles: string[];
     localesFound: string[];
     totalKeys: number;
     durationMs: number;

@@ -52,7 +52,7 @@ Useful flags: `--src <dir>`, `--locales <dir>`, `--base <locale>`,
     { "key": "home.welcome", "baseLocale": "en", "targetLocale": "pt",
       "baseVars": ["name"], "targetVars": [] }
   ],
-  "meta": { "filesScanned": 5, "localesFound": ["en", "pt"], "totalKeys": 120, "durationMs": 54 }
+  "meta": { "filesScanned": 5, "skippedFiles": [], "localesFound": ["en", "pt"], "totalKeys": 120, "durationMs": 54 }
 }
 ```
 

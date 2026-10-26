@@ -49,4 +49,15 @@ describe("runLint (end to end)", () => {
     // still missing in pt, so issues remain — sanity that ignore alone isn't enough
     expect(hasIssues(clean)).toBe(true);
   });
+
+  it("reports source files that fail to parse instead of dropping them silently", async () => {
+    const result = await runLint(
+      { ...config, src: [path.join(__dirname, "fixtures", "unparseable")] },
+      root,
+    );
+    expect(result.meta.skippedFiles).toEqual([
+      path.join("..", "unparseable", "Broken.tsx"),
+    ]);
+    expect(result.meta.filesScanned).toBe(0);
+  });
 });

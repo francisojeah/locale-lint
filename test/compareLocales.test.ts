@@ -47,6 +47,16 @@ describe("compareLocales", () => {
     expect(r.unusedKeys).toEqual(["b"]);
   });
 
+  it("counts the key a suffix-resolved usage points at as used", () => {
+    const r = compareLocales(
+      [file("en", { "Home.title": "T", "Home.other": "O" })],
+      used(["title"]),
+      "en",
+    );
+    expect(r.undefinedKeys).toEqual([]);
+    expect(r.unusedKeys).toEqual(["Home.other"]);
+  });
+
   it("does not flag plural children of a used key as unused", () => {
     const r = compareLocales(
       [file("en", { "count.one": "1", "count.other": "many" })],

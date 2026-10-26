@@ -15,6 +15,11 @@ describe("extractKeysFromFile", () => {
     expect(keys).toContain("home.cta");
   });
 
+  it("captures expression-free template literals and <Trans i18nKey>", () => {
+    expect(keys).toContain("home.static");
+    expect(keys).toContain("home.trans");
+  });
+
   it("ignores .t() on unknown objects (e.g. array.t())", () => {
     expect(keys).not.toContain("not.a.key");
   });

@@ -43,6 +43,18 @@ export function printResult(result: LintResult, format: OutputFormat): void {
   console.log(chalk.dim(`  ${"─".repeat(56)}`));
   console.log();
 
+  if (meta.skippedFiles.length > 0) {
+    console.log(
+      chalk.yellow.bold(
+        `  ${WARN} Could not parse ${pluralize(meta.skippedFiles.length, "file")} — not analysed`,
+      ),
+    );
+    for (const file of meta.skippedFiles) {
+      console.log(chalk.dim(`     · ${file}`));
+    }
+    console.log();
+  }
+
   let totalIssues = 0;
 
   // ── Missing Keys ──────────────────────────────────────────────────────────

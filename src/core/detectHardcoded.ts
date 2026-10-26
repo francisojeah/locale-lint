@@ -1,13 +1,9 @@
-import fs from "fs";
-import * as parser from "@babel/parser";
-import traverse from "@babel/traverse";
+import traverse, { type NodePath } from "@babel/traverse";
+import type { File } from "@babel/types";
 import type { HardcodedString } from "../types/index";
 import { relativePath } from "./scanFiles";
+import { parseSource } from "./parseSource";
 
-/**
- * JSX element names to always ignore (non-UI, technical content).
- * Text inside these tags is likely intentional non-translatable content.
- */
 const IGNORED_TAGS = new Set([
   "script",
   "style",
@@ -22,141 +18,101 @@ const IGNORED_TAGS = new Set([
   "defs",
 ]);
 
-/**
- * Strings to always ignore regardless of content.
- * Short strings that are clearly not UI copy.
- */
-const ALWAYS_IGNORE = new Set([
-  "...",
-  "—",
-  "–",
-  "-",
-  "|",
-  "/",
-  "\\",
-  "&",
-  "·",
-  "•",
-  "·",
+const ALWAYS_IGNORE = new Set(["...", "—", "–", "-", "|", "/", "\\", "&", "·", "•"]);
+
+const UI_COPY_ATTRS = new Set([
+  "placeholder",
+  "label",
+  "title",
+  "aria-label",
+  "alt",
+  "tooltip",
+  "hint",
+  "description",
+  "message",
 ]);
 
+function isUserFacing(text: string, minLength: number): boolean {
+  if (!text || text.length < minLength) return false;
+  if (/^\d+([.,]\d+)?$/.test(text)) return false;
+  if (ALWAYS_IGNORE.has(text)) return false;
+  return !/^[^\w\s]+$/.test(text);
+}
+
 /**
- * Detects hardcoded (non-translated) strings inside JSX text nodes.
- *
- * Flags:
- *   <Text>Hello world</Text>  → "Hello world" 🚨
- *   <div>Welcome back</div>   → "Welcome back" 🚨
- *
- * Ignores:
- *   <Text>{name}</Text>       — expression, not a literal
- *   <Text>42</Text>           — number-only string
- *   <Text> </Text>            — whitespace only
- *   <Text>OK</Text>           — below minLength threshold
- *   <code>const x = 1</code> — ignored tag
+ * Detects hardcoded (non-translated) strings in JSX: text children, string
+ * literals in `{'...'}` children, and string values of UI-copy attributes.
  */
 export function detectHardcodedStrings(
   filePath: string,
   cwd: string,
   minLength = 3,
+  ast: File | null = parseSource(filePath),
 ): HardcodedString[] {
-  const source = fs.readFileSync(filePath, "utf-8");
   const found: HardcodedString[] = [];
   const relPath = relativePath(filePath, cwd);
 
-  let ast: ReturnType<typeof parser.parse>;
-  try {
-    ast = parser.parse(source, {
-      sourceType: "module",
-      plugins: [
-        "typescript",
-        "jsx",
-        "decorators-legacy",
-        "classProperties",
-        "optionalChaining",
-        "nullishCoalescingOperator",
-      ],
+  if (!ast) return found;
+
+  const add = (
+    text: string,
+    loc: { start: { line: number; column: number } } | null | undefined,
+  ) => {
+    if (!isUserFacing(text, minLength)) return;
+    found.push({
+      text,
+      file: relPath,
+      line: loc?.start.line ?? 0,
+      column: loc?.start.column ?? 0,
     });
-  } catch {
-    return [];
-  }
+  };
+
+  const insideIgnoredTag = (path: NodePath) => {
+    const parentEl = path.findParent((p) => p.isJSXElement());
+    if (!parentEl?.isJSXElement()) return false;
+    const { name } = parentEl.node.openingElement;
+    return (
+      name.type === "JSXIdentifier" && IGNORED_TAGS.has(name.name.toLowerCase())
+    );
+  };
 
   traverse(ast, {
-    // ── JSX Text Nodes: <Text>Hello</Text> ────────────────────────────────
     JSXText(nodePath) {
-      const raw = nodePath.node.value;
-      const text = raw.trim();
-
-      // Skip empty / whitespace-only
-      if (!text) return;
-
-      // Skip if below minimum length
-      if (text.length < minLength) return;
-
-      // Skip if it's purely numeric
-      if (/^\d+([.,]\d+)?$/.test(text)) return;
-
-      // Skip known ignore list
-      if (ALWAYS_IGNORE.has(text)) return;
-
-      // Skip if it looks like a punctuation/symbol cluster
-      if (/^[^\w\s]+$/.test(text)) return;
-
-      // Check if parent JSX element is an ignored tag
-      const parentEl = nodePath.findParent((p) => p.isJSXElement());
-      if (parentEl && parentEl.isJSXElement()) {
-        const openingEl = parentEl.node.openingElement;
-        if (openingEl.name.type === "JSXIdentifier") {
-          const tagName = openingEl.name.name.toLowerCase();
-          if (IGNORED_TAGS.has(tagName)) return;
-        }
-      }
-
-      found.push({
-        text,
-        file: relPath,
-        line: nodePath.node.loc?.start.line ?? 0,
-        column: nodePath.node.loc?.start.column ?? 0,
-      });
+      if (insideIgnoredTag(nodePath)) return;
+      add(nodePath.node.value.trim(), nodePath.node.loc);
     },
 
-    // ── JSX String Attributes: <Button label="Click me"> ──────────────────
+    JSXExpressionContainer(nodePath) {
+      const { expression } = nodePath.node;
+      const text =
+        expression.type === "StringLiteral"
+          ? expression.value
+          : expression.type === "TemplateLiteral" &&
+              expression.expressions.length === 0
+            ? expression.quasis[0].value.cooked
+            : null;
+      if (text == null) return;
+
+      const parent = nodePath.parent;
+      if (parent.type === "JSXAttribute") {
+        if (
+          parent.name.type === "JSXIdentifier" &&
+          UI_COPY_ATTRS.has(parent.name.name.toLowerCase())
+        ) {
+          add(text.trim(), nodePath.node.loc);
+        }
+        return;
+      }
+      if (insideIgnoredTag(nodePath)) return;
+      add(text.trim(), nodePath.node.loc);
+    },
+
     JSXAttribute(nodePath) {
       const { name, value } = nodePath.node;
-
-      // Only care about string literal values
-      if (!value || value.type !== "StringLiteral") return;
-
-      // Only flag attributes that likely contain UI copy
-      const UI_COPY_ATTRS = new Set([
-        "placeholder",
-        "label",
-        "title",
-        "aria-label",
-        "alt",
-        "tooltip",
-        "hint",
-        "description",
-        "message",
-      ]);
-
-      const attrName =
-        name.type === "JSXIdentifier" ? name.name.toLowerCase() : "";
-
-      if (!UI_COPY_ATTRS.has(attrName)) return;
-
-      const text = value.value.trim();
-
-      if (!text || text.length < minLength) return;
-      if (/^\d+([.,]\d+)?$/.test(text)) return;
-      if (ALWAYS_IGNORE.has(text)) return;
-      if (/^[^\w\s]+$/.test(text)) return;
-
-      found.push({
-        text,
-        file: relPath,
-        line: nodePath.node.loc?.start.line ?? 0,
-        column: nodePath.node.loc?.start.column ?? 0,
-      });
+      if (value?.type !== "StringLiteral") return;
+      if (name.type !== "JSXIdentifier") return;
+      if (!UI_COPY_ATTRS.has(name.name.toLowerCase())) return;
+      add(value.value.trim(), nodePath.node.loc);
     },
   });
 

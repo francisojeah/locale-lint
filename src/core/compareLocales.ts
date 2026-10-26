@@ -75,28 +75,15 @@ export function compareLocales(
   );
 
   const allDefinedKeysArray = Array.from(allDefinedKeys);
-  const usedKeysArray = Array.from(usedKeys.keys());
 
-  // ── 3. Unused Keys ─────────────────────────────────────────────────────────
-  // Skip plural children (orders.productsCount.one) when the parent
-  // (orders.productsCount) is called in code — that's i18next/i18n-js
-  // pluralization. t('orders.productsCount', { count }) resolves at runtime.
-  const unusedKeys: string[] = [];
-  for (const key of allDefinedKeys) {
-    if (usedKeys.has(key)) continue;
-
-    const isPluralChild = usedKeysArray.some((usedKey) =>
-      key.startsWith(`${usedKey}.`),
-    );
-    if (!isPluralChild) {
-      unusedKeys.push(key);
+  // Parents of nested keys, so a plural parent (orders.count) is recognised in O(1).
+  const definedParents = new Set<string>();
+  for (const k of allDefinedKeysArray) {
+    for (let i = k.indexOf("."); i !== -1; i = k.indexOf(".", i + 1)) {
+      definedParents.add(k.slice(0, i));
     }
   }
 
-  // ── 4. Undefined Keys ──────────────────────────────────────────────────────
-  // No exact match and not a plural parent. A short key whose namespace couldn't
-  // be resolved is recovered by suffix (unique match by default; any match in
-  // namespace-agnostic files).
   const definedByLastSegment = new Map<string, string[]>();
   for (const k of allDefinedKeysArray) {
     const last = k.slice(k.lastIndexOf(".") + 1);
@@ -105,20 +92,25 @@ export function compareLocales(
     else definedByLastSegment.set(last, [k]);
   }
 
+  // ── 3. Undefined Keys ──────────────────────────────────────────────────────
+  // No exact match and not a plural parent. A short key whose namespace couldn't
+  // be resolved is recovered by suffix (unique match by default; any match in
+  // namespace-agnostic files), and the key it resolves to counts as used.
   const undefinedKeys: UsedKey[] = [];
+  const resolvedBySuffix = new Set<string>();
   for (const [key, usedKey] of usedKeys) {
-    const exactMatch = allDefinedKeys.has(key);
-    const isPluralParent = allDefinedKeysArray.some((k) =>
-      k.startsWith(`${key}.`),
-    );
-    if (exactMatch || isPluralParent) continue;
+    if (allDefinedKeys.has(key) || definedParents.has(key)) continue;
 
     const last = key.slice(key.lastIndexOf(".") + 1);
     const suffixMatches = (definedByLastSegment.get(last) ?? []).filter((k) =>
       k.endsWith(`.${key}`),
     );
 
-    if (options.undefinedKeyResolution === "suffix" && suffixMatches.length === 1) {
+    if (
+      options.undefinedKeyResolution === "suffix" &&
+      suffixMatches.length === 1
+    ) {
+      resolvedBySuffix.add(suffixMatches[0]);
       continue;
     }
     const filePath = usedKey.file.replace(/\\/g, "/");
@@ -128,11 +120,26 @@ export function compareLocales(
         minimatch(filePath, g.replace(/^\.\//, "")),
       )
     ) {
+      suffixMatches.forEach((k) => resolvedBySuffix.add(k));
       continue;
     }
 
     undefinedKeys.push(usedKey);
   }
+
+  // ── 4. Unused Keys ─────────────────────────────────────────────────────────
+  // A plural child (orders.count.one) is used when its parent (orders.count)
+  // is called in code: t('orders.count', { count }) resolves at runtime.
+  const hasUsedAncestor = (key: string): boolean => {
+    for (let i = key.lastIndexOf("."); i > 0; i = key.lastIndexOf(".", i - 1)) {
+      if (usedKeys.has(key.slice(0, i))) return true;
+    }
+    return false;
+  };
+  const unusedKeys = allDefinedKeysArray.filter(
+    (key) =>
+      !usedKeys.has(key) && !resolvedBySuffix.has(key) && !hasUsedAncestor(key),
+  );
 
   // ── 5. Interpolation Mismatches ────────────────────────────────────────────
   // Keys where the interpolation variables differ between locales.

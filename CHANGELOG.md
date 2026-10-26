@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- **Source files that fail to parse are reported** (`meta.skippedFiles` in `--json`, a
+  warning in the pretty output) instead of being dropped silently.
+- **A key resolved by suffix now counts as used**, so it is no longer also reported unused.
+
+### Added
+
+- `<Trans i18nKey="…" />` and expression-free template literals (`` t(`a.b`) ``) are
+  recognised as key usages.
+- Hardcoded-string detection covers `{'text'}` children and `placeholder={'text'}`-style
+  attributes.
+
+### Changed
+
+- Each source file is parsed once, and plural-parent lookups no longer scan every key.
+
 ## 2.0.0
 
 This release hardens correctness. Two changes affect what gets reported, so the

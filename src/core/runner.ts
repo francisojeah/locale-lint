@@ -1,7 +1,8 @@
 import path from "path";
 import chalk from "chalk";
 import type { LocaleLintConfig, LintResult } from "../types/index";
-import { scanFiles } from "./scanFiles";
+import { scanFiles, relativePath } from "./scanFiles";
+import { parseSource } from "./parseSource";
 import { extractKeysFromFile, deduplicateKeys } from "./extractKeys";
 import { detectHardcodedStrings } from "./detectHardcoded";
 import { loadLocales } from "./loadLocales";
@@ -55,17 +56,20 @@ export async function runLint(
   const sourceFiles = scanFiles(config, cwd);
   const allUsedKeys = [];
   const allHardcoded = [];
+  const skippedFiles: string[] = [];
 
   for (const file of sourceFiles) {
-    const keys = extractKeysFromFile(file, cwd, config.namespaceHooks);
-    allUsedKeys.push(...keys);
-
-    const hardcoded = detectHardcodedStrings(
-      file,
-      cwd,
-      config.minHardcodedLength,
+    const ast = parseSource(file);
+    if (!ast) {
+      skippedFiles.push(relativePath(file, cwd));
+      continue;
+    }
+    allUsedKeys.push(
+      ...extractKeysFromFile(file, cwd, config.namespaceHooks, ast),
     );
-    allHardcoded.push(...hardcoded);
+    allHardcoded.push(
+      ...detectHardcodedStrings(file, cwd, config.minHardcodedLength, ast),
+    );
   }
 
   const usedKeysMap = deduplicateKeys(allUsedKeys);
@@ -106,7 +110,8 @@ export async function runLint(
     hardcodedStrings: allHardcoded,
     interpolationMismatches,
     meta: {
-      filesScanned: sourceFiles.length,
+      filesScanned: sourceFiles.length - skippedFiles.length,
+      skippedFiles,
       localesFound: locales.map((l) => l.locale),
       totalKeys,
       durationMs: Date.now() - startTime,

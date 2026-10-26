@@ -8,6 +8,10 @@ export function Screen({ name }: { name: string }) {
       <TextInput placeholder="Enter your email" />
       <Icon alt="Logo" onPress={go} />
       <code>const x = 1</code>
+      {"Literal child text"}
+      {" "}
+      <TextInput placeholder={"Expression placeholder"} />
+      <View testID={"not-ui-copy"} />
     </>
   );
 }

@@ -21,7 +21,7 @@ const result: LintResult = {
       targetVars: [],
     },
   ],
-  meta: { filesScanned: 2, localesFound: ["en", "pt"], totalKeys: 5, durationMs: 7 },
+  meta: { filesScanned: 2, skippedFiles: [], localesFound: ["en", "pt"], totalKeys: 5, durationMs: 7 },
 };
 
 const clean: LintResult = {
@@ -31,7 +31,7 @@ const clean: LintResult = {
   undefinedKeys: [],
   hardcodedStrings: [],
   interpolationMismatches: [],
-  meta: { filesScanned: 1, localesFound: ["en"], totalKeys: 1, durationMs: 1 },
+  meta: { filesScanned: 1, skippedFiles: [], localesFound: ["en"], totalKeys: 1, durationMs: 1 },
 };
 
 afterEach(() => {

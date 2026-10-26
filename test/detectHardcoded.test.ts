@@ -12,6 +12,8 @@ describe("detectHardcodedStrings", () => {
     expect(texts).toContain("Welcome to the platform");
     expect(texts).toContain("Enter your email"); // placeholder
     expect(texts).toContain("Logo"); // alt
+    expect(texts).toContain("Literal child text"); // {"..."} child
+    expect(texts).toContain("Expression placeholder"); // placeholder={"..."}
   });
 
   it("ignores expressions, numbers, short strings, and ignored tags", () => {
@@ -19,5 +21,6 @@ describe("detectHardcodedStrings", () => {
     expect(texts).not.toContain("42"); // numeric
     expect(texts).not.toContain("OK"); // below minLength
     expect(texts).not.toContain("const x = 1"); // inside <code>
+    expect(texts).not.toContain("not-ui-copy"); // non-UI attribute
   });
 });

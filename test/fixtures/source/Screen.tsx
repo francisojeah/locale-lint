@@ -10,6 +10,8 @@ export function Screen() {
       {i18n.t("home.subtitle")}
       {intl.formatMessage({ id: "home.cta" })}
       {t(`dynamic.${id}`)}
+      {t(`home.static`)}
+      <Trans i18nKey="home.trans" />
     </>
   );
 }
