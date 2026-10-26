@@ -1,3 +1,4 @@
+import { minimatch } from "minimatch";
 import type {
   TranslationFile,
   UsedKey,
@@ -7,9 +8,15 @@ import { extractInterpolationVars } from "../utils/flatten";
 
 export interface CompareLocalesResult {
   missingKeys: Record<string, string[]>;
+  extraKeys: Record<string, string[]>;
   unusedKeys: string[];
   undefinedKeys: UsedKey[];
   interpolationMismatches: InterpolationMismatch[];
+}
+
+export interface CompareLocalesOptions {
+  undefinedKeyResolution: "suffix" | "strict";
+  namespaceAgnosticFiles: string[];
 }
 
 /**
@@ -24,6 +31,10 @@ export function compareLocales(
   locales: TranslationFile[],
   usedKeys: Map<string, UsedKey>,
   baseLocale: string,
+  options: CompareLocalesOptions = {
+    undefinedKeyResolution: "suffix",
+    namespaceAgnosticFiles: [],
+  },
 ): CompareLocalesResult {
   const base = locales.find((l) => l.locale === baseLocale);
   const others = locales.filter((l) => l.locale !== baseLocale);
@@ -32,16 +43,28 @@ export function compareLocales(
   // Keys in base locale that are missing from other locales.
   const missingKeys: Record<string, string[]> = {};
 
+  // ── 1b. Extra Keys (in a target locale but absent from base) ───────────────
+  const extraKeys: Record<string, string[]> = {};
+
   if (base) {
     for (const other of others) {
       const missing: string[] = [];
+      const extra: string[] = [];
       for (const key of Object.keys(base.keys)) {
         if (!(key in other.keys)) {
           missing.push(key);
         }
       }
+      for (const key of Object.keys(other.keys)) {
+        if (!(key in base.keys)) {
+          extra.push(key);
+        }
+      }
       if (missing.length > 0) {
         missingKeys[other.locale] = missing.sort();
+      }
+      if (extra.length > 0) {
+        extraKeys[other.locale] = extra.sort();
       }
     }
   }
@@ -52,38 +75,71 @@ export function compareLocales(
   );
 
   const allDefinedKeysArray = Array.from(allDefinedKeys);
-  const usedKeysArray = Array.from(usedKeys.keys());
 
-  // ── 3. Unused Keys ─────────────────────────────────────────────────────────
-  // Skip plural children (orders.productsCount.one) when the parent
-  // (orders.productsCount) is called in code — that's i18next/i18n-js
-  // pluralization. t('orders.productsCount', { count }) resolves at runtime.
-  const unusedKeys: string[] = [];
-  for (const key of allDefinedKeys) {
-    if (usedKeys.has(key)) continue;
-
-    const isPluralChild = usedKeysArray.some((usedKey) =>
-      key.startsWith(`${usedKey}.`),
-    );
-    if (!isPluralChild) {
-      unusedKeys.push(key);
+  // Parents of nested keys, so a plural parent (orders.count) is recognised in O(1).
+  const definedParents = new Set<string>();
+  for (const k of allDefinedKeysArray) {
+    for (let i = k.indexOf("."); i !== -1; i = k.indexOf(".", i + 1)) {
+      definedParents.add(k.slice(0, i));
     }
   }
 
-  // ── 4. Undefined Keys ──────────────────────────────────────────────────────
-  // A key is only truly undefined if:
-  //   a) it has no exact match in translations, AND
-  //   b) it has no children in translations (not a plural parent)
+  const definedByLastSegment = new Map<string, string[]>();
+  for (const k of allDefinedKeysArray) {
+    const last = k.slice(k.lastIndexOf(".") + 1);
+    const bucket = definedByLastSegment.get(last);
+    if (bucket) bucket.push(k);
+    else definedByLastSegment.set(last, [k]);
+  }
+
+  // ── 3. Undefined Keys ──────────────────────────────────────────────────────
+  // No exact match and not a plural parent. A short key whose namespace couldn't
+  // be resolved is recovered by suffix (unique match by default; any match in
+  // namespace-agnostic files), and the key it resolves to counts as used.
   const undefinedKeys: UsedKey[] = [];
+  const resolvedBySuffix = new Set<string>();
   for (const [key, usedKey] of usedKeys) {
-    const exactMatch = allDefinedKeys.has(key);
-    const isPluralParent = allDefinedKeysArray.some((k) =>
-      k.startsWith(`${key}.`),
+    if (allDefinedKeys.has(key) || definedParents.has(key)) continue;
+
+    const last = key.slice(key.lastIndexOf(".") + 1);
+    const suffixMatches = (definedByLastSegment.get(last) ?? []).filter((k) =>
+      k.endsWith(`.${key}`),
     );
-    if (!exactMatch && !isPluralParent) {
-      undefinedKeys.push(usedKey);
+
+    if (
+      options.undefinedKeyResolution === "suffix" &&
+      suffixMatches.length === 1
+    ) {
+      resolvedBySuffix.add(suffixMatches[0]);
+      continue;
     }
+    const filePath = usedKey.file.replace(/\\/g, "/");
+    if (
+      suffixMatches.length > 0 &&
+      options.namespaceAgnosticFiles.some((g) =>
+        minimatch(filePath, g.replace(/^\.\//, "")),
+      )
+    ) {
+      suffixMatches.forEach((k) => resolvedBySuffix.add(k));
+      continue;
+    }
+
+    undefinedKeys.push(usedKey);
   }
+
+  // ── 4. Unused Keys ─────────────────────────────────────────────────────────
+  // A plural child (orders.count.one) is used when its parent (orders.count)
+  // is called in code: t('orders.count', { count }) resolves at runtime.
+  const hasUsedAncestor = (key: string): boolean => {
+    for (let i = key.lastIndexOf("."); i > 0; i = key.lastIndexOf(".", i - 1)) {
+      if (usedKeys.has(key.slice(0, i))) return true;
+    }
+    return false;
+  };
+  const unusedKeys = allDefinedKeysArray.filter(
+    (key) =>
+      !usedKeys.has(key) && !resolvedBySuffix.has(key) && !hasUsedAncestor(key),
+  );
 
   // ── 5. Interpolation Mismatches ────────────────────────────────────────────
   // Keys where the interpolation variables differ between locales.
@@ -102,7 +158,7 @@ export function compareLocales(
         const otherVars = extractInterpolationVars(otherValue);
         const isDifferent =
           baseVars.length !== otherVars.length ||
-          baseVars.some((v, i) => v !== otherVars[i]);
+          baseVars.some((v) => !otherVars.includes(v));
 
         if (isDifferent) {
           interpolationMismatches.push({
@@ -119,6 +175,7 @@ export function compareLocales(
 
   return {
     missingKeys,
+    extraKeys,
     unusedKeys: unusedKeys.sort(),
     undefinedKeys: undefinedKeys.sort((a, b) => a.key.localeCompare(b.key)),
     interpolationMismatches,

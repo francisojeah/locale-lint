@@ -8,12 +8,15 @@ import { resolveConfig } from "./utils/config";
 import { printResult, printScanning } from "./utils/logger";
 import type { OutputFormat } from "./types/index";
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { version } = require("../package.json");
+
 const program = new Command();
 
 program
   .name("locale-lint")
   .description("Zero-config i18n linter for React, React Native & Next.js")
-  .version("1.0.0");
+  .version(version);
 
 program
   .command("check")
@@ -23,6 +26,7 @@ program
   .option("--base <locale>", "Base locale to compare against (default: en)")
   .option("--json", "Output results as JSON (useful for CI pipelines)")
   .option("--ignore-unused", "Skip unused key detection")
+  .option("--ignore-undefined", "Skip undefined key detection")
   .option("--ignore-hardcoded", "Skip hardcoded string detection")
   .action(async (options) => {
     const cwd = process.cwd();
@@ -48,21 +52,23 @@ program
 
       // Apply CLI-level suppressions
       if (options.ignoreUnused) result = { ...result, unusedKeys: [] };
+      if (options.ignoreUndefined) result = { ...result, undefinedKeys: [] };
       if (options.ignoreHardcoded) result = { ...result, hardcodedStrings: [] };
 
       // Print results
       printResult(result, format);
 
-      // Exit with code 1 if any issues found (enables CI gating)
+      // Set exit code 1 if issues found (enables CI gating). Use exitCode
+      // rather than process.exit() so piped --json output flushes fully.
       if (hasIssues(result)) {
-        process.exit(1);
+        process.exitCode = 1;
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error();
       console.error(`  ${chalk.red("Error:")} ${message}`);
       console.error();
-      process.exit(2);
+      process.exitCode = 2;
     }
   });
 
@@ -86,10 +92,20 @@ program
       extensions: ["js", "ts", "jsx", "tsx"],
       minHardcodedLength: 3,
       ignoreKeys: [],
-      exclude: ["node_modules", "dist", "build", ".next", "coverage"],
+      exclude: ["node_modules", "dist", "build", ".next", ".expo", "coverage"],
+      namespaceHooks: ["useTranslations", "getTranslations"],
+      undefinedKeyResolution: "suffix",
+      namespaceAgnosticFiles: [],
     };
 
-    fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`\n  ${chalk.red("Error:")} ${message}\n`);
+      process.exitCode = 2;
+      return;
+    }
     console.log();
     console.log(
       `  ${chalk.green("✅")} Created ${chalk.bold("locale-lint.config.json")}`,

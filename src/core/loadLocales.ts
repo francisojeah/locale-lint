@@ -22,11 +22,14 @@ export function loadLocales(localesDir: string): TranslationFile[] {
   }
 
   const results: TranslationFile[] = [];
+  // A locale that fails to parse must fail the run, not vanish silently.
+  const errors: string[] = [];
   const entries = fs.readdirSync(localesDir);
 
   for (const entry of entries) {
     const entryPath = path.join(localesDir, entry);
-    const stat = fs.statSync(entryPath);
+    const stat = safeStat(entryPath);
+    if (!stat) continue;
 
     if (stat.isDirectory()) {
       // Namespaced structure: locales/en/common.json, locales/en/auth.json
@@ -37,13 +40,17 @@ export function loadLocales(localesDir: string): TranslationFile[] {
       for (const nsFile of nsFiles) {
         const ns = path.basename(nsFile, path.extname(nsFile));
         const nsPath = path.join(entryPath, nsFile);
-        const raw = parseLocaleFile(nsPath);
-        if (!raw) continue;
+        try {
+          const raw = parseLocaleFile(nsPath);
+          if (!raw) continue;
 
-        // Prefix keys with namespace: "common.hello", "auth.login"
-        const flat = flattenObject(raw);
-        for (const [k, v] of Object.entries(flat)) {
-          mergedKeys[`${ns}.${k}`] = v;
+          // Prefix keys with namespace: "common.hello", "auth.login"
+          const flat = flattenObject(raw);
+          for (const [k, v] of Object.entries(flat)) {
+            mergedKeys[`${ns}.${k}`] = v;
+          }
+        } catch (err) {
+          errors.push(formatParseError(nsPath, err));
         }
       }
 
@@ -53,18 +60,46 @@ export function loadLocales(localesDir: string): TranslationFile[] {
     } else if (isLocaleFile(entry)) {
       // Flat structure: locales/en.json, locales/pt.json
       const locale = path.basename(entry, path.extname(entry));
-      const raw = parseLocaleFile(entryPath);
-      if (!raw) continue;
+      try {
+        const raw = parseLocaleFile(entryPath);
+        if (!raw) continue;
 
-      results.push({
-        locale,
-        filePath: entryPath,
-        keys: flattenObject(raw),
-      });
+        results.push({
+          locale,
+          filePath: entryPath,
+          keys: flattenObject(raw),
+        });
+      } catch (err) {
+        errors.push(formatParseError(entryPath, err));
+      }
     }
   }
 
+  if (errors.length > 0) {
+    const count = errors.length;
+    throw new Error(
+      `Could not parse ${count} locale file${count === 1 ? "" : "s"}:\n` +
+        errors.map((e) => `    • ${e}`).join("\n") +
+        `\n\n  Fix the syntax error${count === 1 ? "" : "s"} above. ` +
+        `A locale that fails to parse cannot be checked.`,
+    );
+  }
+
   return results;
+}
+
+/** statSync that returns null instead of throwing on dangling symlinks. */
+function safeStat(p: string): fs.Stats | null {
+  try {
+    return fs.statSync(p);
+  } catch {
+    return null;
+  }
+}
+
+function formatParseError(filePath: string, err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return `${filePath}: ${message}`;
 }
 
 function isLocaleFile(filename: string): boolean {
@@ -74,120 +109,51 @@ function isLocaleFile(filename: string): boolean {
 /**
  * Parses a locale file into a plain object.
  * Handles JSON directly; for JS/TS files extracts the exported object literal
- * using a lightweight regex approach (avoids full transpilation).
+ * via a Babel AST (no code execution).
+ *
+ * Throws on any parse/extraction failure — the caller collects these and fails
+ * the run, rather than silently dropping the locale.
  */
 function parseLocaleFile(filePath: string): Record<string, unknown> | null {
   const ext = path.extname(filePath);
 
-  try {
-    if (ext === ".json") {
-      const content = fs.readFileSync(filePath, "utf-8");
-      return JSON.parse(content);
+  if (ext === ".json") {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("expected a JSON object of translation keys");
     }
+    return parsed;
+  }
 
-    if (ext === ".ts" || ext === ".js") {
-      return parseJsLocaleFile(filePath);
+  if (ext === ".ts" || ext === ".js") {
+    const result = parseJsLocaleFile(filePath);
+    if (!result) {
+      throw new Error(
+        "could not read a translations object from this file. locale-lint reads " +
+          "static object literals (export default {…}, module.exports = {…}); values " +
+          "built from imports, function calls, spreads or template expressions can't be " +
+          "resolved without executing the file. Use a JSON locale or a static object.",
+      );
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.warn(`  ⚠  Could not parse ${filePath}: ${message}`);
+    return result;
   }
 
   return null;
 }
 
 /**
- * Extracts the default-exported object from a TS/JS translation file.
- *
- * Handles all common real-world patterns:
- *
- *   Pattern 1 — Inline export (most common):
- *     export default { home: { title: "Hello" } }
- *
- *   Pattern 2 — Typed inline export:
- *     export default { home: { title: "Hello" } } satisfies Translations
- *     const en: Translations = { ... }; export default en;
- *
- *   Pattern 3 — Named variable then export (very common in typed setups):
- *     const translations = { ... }
- *     export default translations
- *
- *   Pattern 4 — CommonJS:
- *     module.exports = { ... }
- *
- *   Pattern 5 — as const (TypeScript):
- *     export default { ... } as const
- *
- * Strategy: Strip TS syntax → write temp .cjs → require() it.
- * Falls back to AST-based object extraction if require() fails.
+ * Reads the default-exported object from a TS/JS translation file via Babel AST.
+ * Never executes the file — running arbitrary code from a "locale" file is an
+ * ACE risk. Supports inline/named-variable exports, `satisfies` and `as const`.
  */
 function parseJsLocaleFile(filePath: string): Record<string, unknown> | null {
   const content = fs.readFileSync(filePath, "utf-8");
-
-  // ── Strategy 1: Strip TS and require() ──────────────────────────────────
-  const result = tryRequireStripped(filePath, content);
-  if (result) return result;
-
-  // ── Strategy 2: AST-based object extraction ──────────────────────────────
   return extractViaAst(content);
 }
 
-function tryRequireStripped(
-  filePath: string,
-  content: string,
-): Record<string, unknown> | null {
-  const cleaned = content
-    // Remove comments
-    .replace(/\/\/.*$/gm, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    // Remove import statements
-    .replace(/^import\s+(?:type\s+)?.*$/gm, "")
-    // Remove `satisfies SomeType` suffix (TS 4.9+)
-    .replace(/\}\s+satisfies\s+\w[\w<>,\s\[\]|&]*/g, "}")
-    // Remove `as const` suffix
-    .replace(/\bas\s+const\b/g, "")
-    // Strip inline type annotations: const x: Type = ...
-    .replace(/:\s*(?:Readonly<)?[A-Z][A-Za-z<>,\s\[\]|&.]*>?\s*(?==)/g, "")
-    // Strip typed variable annotations like `const en: Translations = {`
-    .replace(
-      /^(const|let|var)\s+(\w+)\s*:\s*\w[\w<>,\s\[\]|&]*\s*=/gm,
-      "$1 $2 =",
-    )
-    // Normalize `export default varName` → `module.exports = varName`
-    .replace(/export\s+default\s+(\w+)\s*;?\s*$/m, "module.exports = $1;")
-    // Normalize `export default { ... }` → `module.exports = { ... }`
-    .replace(/export\s+default\s+/, "module.exports = ")
-    // Remove remaining TypeScript export keywords
-    .replace(/^export\s+/gm, "");
-
-  const tmpPath = filePath + ".locale-lint.tmp.cjs";
-  try {
-    fs.writeFileSync(tmpPath, cleaned);
-    // Clear require cache to avoid stale results across runs
-    delete require.cache[require.resolve(tmpPath)];
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require(tmpPath);
-    const result = mod.default || mod;
-    if (result && typeof result === "object" && !Array.isArray(result)) {
-      return result as Record<string, unknown>;
-    }
-    return null;
-  } catch {
-    return null;
-  } finally {
-    try {
-      fs.unlinkSync(tmpPath);
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
 /**
- * AST-based fallback: uses Babel to parse the file and extract
- * the object literal assigned to the default export.
- *
- * Works even when require() fails due to complex TS syntax.
+ * Parses the file with Babel and extracts the object literal assigned to the
+ * default export (handles both `export default {…}` and `const x = {…}; export default x`).
  */
 function extractViaAst(content: string): Record<string, unknown> | null {
   try {
@@ -207,31 +173,39 @@ function extractViaAst(content: string): Record<string, unknown> | null {
     let defaultExportName: string | null = null;
 
     for (const node of ast.program.body) {
-      // export default { ... }
-      if (
-        node.type === "ExportDefaultDeclaration" &&
-        node.declaration.type === "ObjectExpression"
-      ) {
-        defaultExportObj = objectExpressionToPlain(node.declaration);
-        break;
+      if (node.type === "ExportDefaultDeclaration") {
+        const decl = unwrapTS(node.declaration);
+        if (decl.type === "ObjectExpression") {
+          defaultExportObj = objectExpressionToPlain(decl);
+          break;
+        }
+        if (decl.type === "Identifier") {
+          defaultExportName = decl.name;
+        }
       }
 
-      // export default identifier
+      // module.exports = { ... } or module.exports = x (CommonJS)
       if (
-        node.type === "ExportDefaultDeclaration" &&
-        node.declaration.type === "Identifier"
+        node.type === "ExpressionStatement" &&
+        node.expression.type === "AssignmentExpression" &&
+        isModuleExports(node.expression.left)
       ) {
-        defaultExportName = node.declaration.name;
+        const right = unwrapTS(node.expression.right);
+        if (right.type === "ObjectExpression") {
+          defaultExportObj = objectExpressionToPlain(right);
+          break;
+        }
+        if (right.type === "Identifier") {
+          defaultExportName = right.name;
+        }
       }
 
       // const x = { ... } or const x: Type = { ... }
       if (node.type === "VariableDeclaration") {
         for (const decl of node.declarations) {
-          if (
-            decl.id.type === "Identifier" &&
-            decl.init?.type === "ObjectExpression"
-          ) {
-            const obj = objectExpressionToPlain(decl.init);
+          const init = decl.init && unwrapTS(decl.init);
+          if (decl.id.type === "Identifier" && init?.type === "ObjectExpression") {
+            const obj = objectExpressionToPlain(init);
             if (obj) variableMap.set(decl.id.name, obj);
           }
         }
@@ -243,17 +217,37 @@ function extractViaAst(content: string): Record<string, unknown> | null {
       return variableMap.get(defaultExportName)!;
     }
   } catch {
-    // AST parse failed — try simple regex as last resort
-    return extractObjectLiteralFallback(content);
+    return null; // unparseable → fail loud upstream, don't guess
   }
 
-  return extractObjectLiteralFallback(content);
+  return null;
 }
 
-/**
- * Converts a Babel ObjectExpression AST node into a plain JS object.
- * Only handles string literal values (which is all we need for locale files).
- */
+/** True for `module.exports` or bare `exports` assignment targets. */
+function isModuleExports(left: any): boolean {
+  if (left?.type !== "MemberExpression") return false;
+  return (
+    left.object?.type === "Identifier" &&
+    left.object.name === "module" &&
+    left.property?.type === "Identifier" &&
+    left.property.name === "exports"
+  );
+}
+
+/** Unwraps `x as const` / `x satisfies T` so the inner expression is reached. */
+function unwrapTS(node: any): any {
+  while (
+    node &&
+    (node.type === "TSAsExpression" ||
+      node.type === "TSSatisfiesExpression" ||
+      node.type === "TSConstAssertion")
+  ) {
+    node = node.expression;
+  }
+  return node;
+}
+
+/** Converts a Babel ObjectExpression node into a plain object of leaf strings. */
 function objectExpressionToPlain(node: {
   type: string;
   properties: unknown[];
@@ -264,7 +258,13 @@ function objectExpressionToPlain(node: {
     const p = prop as {
       type: string;
       key: { type: string; name?: string; value?: string };
-      value: { type: string; value?: string; properties?: unknown[] };
+      value: {
+        type: string;
+        value?: string | number | boolean;
+        properties?: unknown[];
+        expressions?: unknown[];
+        quasis?: { value: { cooked?: string; raw: string } }[];
+      };
     };
 
     if (p.type !== "ObjectProperty") continue;
@@ -278,38 +278,24 @@ function objectExpressionToPlain(node: {
 
     if (!key) continue;
 
-    if (p.value.type === "StringLiteral") {
-      result[key] = p.value.value;
-    } else if (p.value.type === "ObjectExpression" && p.value.properties) {
+    const v = unwrapTS(p.value);
+
+    if (v.type === "StringLiteral") {
+      result[key] = v.value;
+    } else if (
+      v.type === "TemplateLiteral" &&
+      (v.expressions?.length ?? 0) === 0 &&
+      v.quasis?.length
+    ) {
+      result[key] = v.quasis[0].value.cooked ?? v.quasis[0].value.raw;
+    } else if (v.type === "NumericLiteral" || v.type === "BooleanLiteral") {
+      result[key] = String(v.value);
+    } else if (v.type === "ObjectExpression" && v.properties) {
       result[key] = objectExpressionToPlain(
-        p.value as { type: string; properties: unknown[] },
+        v as { type: string; properties: unknown[] },
       );
     }
   }
 
   return Object.keys(result).length > 0 ? result : null;
-}
-
-/**
- * Last-resort regex fallback for very simple translation files.
- * Works reliably when the file is plain key: "value" pairs.
- */
-function extractObjectLiteralFallback(
-  content: string,
-): Record<string, unknown> | null {
-  const match = content.match(
-    /(?:export\s+default|module\.exports\s*=)\s*(\{[\s\S]*\})\s*(?:as\s+const|satisfies\s+\w+)?\s*;?\s*$/,
-  );
-  if (!match) return null;
-
-  try {
-    const jsonLike = match[1]
-      .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // quote bare keys
-      .replace(/,\s*([}\]])/g, "$1") // trailing commas
-      .replace(/:\s*`([^`]*)`/g, ': "$1"') // template literals → strings
-      .replace(/'/g, '"'); // single → double quotes
-    return JSON.parse(jsonLike);
-  } catch {
-    return null;
-  }
 }

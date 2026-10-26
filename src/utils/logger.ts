@@ -24,6 +24,7 @@ export function printResult(result: LintResult, format: OutputFormat): void {
 
   const {
     missingKeys,
+    extraKeys,
     unusedKeys,
     undefinedKeys,
     hardcodedStrings,
@@ -41,6 +42,18 @@ export function printResult(result: LintResult, format: OutputFormat): void {
   );
   console.log(chalk.dim(`  ${"─".repeat(56)}`));
   console.log();
+
+  if (meta.skippedFiles.length > 0) {
+    console.log(
+      chalk.yellow.bold(
+        `  ${WARN} Could not parse ${pluralize(meta.skippedFiles.length, "file")} — not analysed`,
+      ),
+    );
+    for (const file of meta.skippedFiles) {
+      console.log(chalk.dim(`     · ${file}`));
+    }
+    console.log();
+  }
 
   let totalIssues = 0;
 
@@ -61,6 +74,22 @@ export function printResult(result: LintResult, format: OutputFormat): void {
       }
       console.log();
     }
+  }
+
+  // ── Extra Keys ────────────────────────────────────────────────────────────
+  for (const locale of Object.keys(extraKeys)) {
+    const keys = extraKeys[locale];
+    if (keys.length === 0) continue;
+    totalIssues += keys.length;
+
+    console.log(
+      chalk.hex("#FFA500").bold(`  ${WARN} Extra in ${chalk.underline(locale)}`) +
+        chalk.dim(` — not in base locale (${keys.length})`),
+    );
+    for (const key of keys) {
+      console.log(`     ${chalk.dim("·")} ${chalk.dim(key)}`);
+    }
+    console.log();
   }
 
   // ── Undefined Keys (used in code but not in translations) ─────────────────

@@ -1,22 +1,65 @@
-import fs from "fs";
-import * as parser from "@babel/parser";
 import traverse from "@babel/traverse";
+import type { File } from "@babel/types";
 import type { UsedKey } from "../types/index";
 import { relativePath } from "./scanFiles";
+import { parseSource } from "./parseSource";
 
 /**
- * Translation function call patterns to detect.
- *
- * Matches:
- *   t('key')                    — most common (i18next, react-i18next, next-intl)
- *   i18n.t('key')               — i18next instance method
- *   i18n.t('key')               — i18n-js
- *   intl.formatMessage({id:'x'}) — react-intl / FormatJS
- *   $t('key')                   — vue-i18n (future)
- *   useTranslation hook result  — handled by detecting `t(` calls
+ * Translation call patterns: t('key'), $t('key'), i18n.t('key'),
+ * intl.formatMessage({ id }), and <Trans i18nKey="key" />.
  */
 const T_FUNCTION_NAMES = new Set(["t", "$t"]);
-const T_METHOD_NAMES = new Set(["t"]); // for i18n.t(), intl.t()
+const T_METHOD_NAMES = new Set(["t"]);
+// Only treat `obj.t(...)` as a translation call for known i18n objects, so
+// unrelated `.t()` methods (e.g. `array.t(...)`) aren't flagged as keys.
+const T_OBJECT_NAMES = new Set(["i18n", "i18next", "I18n", "intl", "$i18n"]);
+
+/**
+ * Resolves the namespace prefix for a translator variable bound by a namespace
+ * hook, so `const t = useTranslations('Home'); t('title')` is read as
+ * `Home.title`. Returns "" when the translator has no namespace.
+ */
+function resolveNamespacePrefix(
+  scope: { getBinding(n: string): any },
+  name: string,
+  hooks: Set<string>,
+): string {
+  const binding = scope.getBinding(name);
+  let p = binding?.path;
+  while (
+    p &&
+    typeof p.isVariableDeclarator === "function" &&
+    !p.isVariableDeclarator()
+  ) {
+    p = p.parentPath;
+  }
+  const init = p?.node?.init;
+  if (!init || init.type !== "CallExpression") return "";
+
+  const callee = init.callee;
+  const fnName =
+    callee.type === "Identifier"
+      ? callee.name
+      : callee.type === "MemberExpression" &&
+          callee.property.type === "Identifier"
+        ? callee.property.name
+        : "";
+  if (!hooks.has(fnName)) return "";
+
+  const arg = init.arguments[0];
+  if (arg?.type === "StringLiteral") return arg.value ? `${arg.value}.` : "";
+  if (arg?.type === "ObjectExpression") {
+    const ns = arg.properties.find(
+      (pr: any) =>
+        pr.type === "ObjectProperty" &&
+        pr.key.type === "Identifier" &&
+        pr.key.name === "namespace" &&
+        pr.value.type === "StringLiteral",
+    );
+    if (ns?.value.value) return `${ns.value.value}.`;
+  }
+  return "";
+}
 
 /**
  * Parses a single source file with Babel and extracts all static translation keys.
@@ -24,31 +67,33 @@ const T_METHOD_NAMES = new Set(["t"]); // for i18n.t(), intl.t()
  * Only static string keys are captured — dynamic keys like t(`key.${x}`) are
  * intentionally ignored because they can't be statically resolved.
  */
-export function extractKeysFromFile(filePath: string, cwd: string): UsedKey[] {
-  const source = fs.readFileSync(filePath, "utf-8");
+export function extractKeysFromFile(
+  filePath: string,
+  cwd: string,
+  namespaceHooks: string[] = ["useTranslations", "getTranslations"],
+  ast: File | null = parseSource(filePath),
+): UsedKey[] {
   const usedKeys: UsedKey[] = [];
   const relPath = relativePath(filePath, cwd);
+  const hooks = new Set(namespaceHooks);
 
-  let ast: ReturnType<typeof parser.parse>;
-  try {
-    ast = parser.parse(source, {
-      sourceType: "module",
-      plugins: [
-        "typescript",
-        "jsx",
-        "decorators-legacy",
-        "classProperties",
-        "optionalChaining",
-        "nullishCoalescingOperator",
-      ],
-    });
-  } catch {
-    // Skip files that fail to parse (e.g. non-standard syntax)
-    return [];
-  }
+  if (!ast) return usedKeys;
 
   traverse(ast, {
-    // ── Pattern 1: t('key') or $t('key') ──────────────────────────────────
+    JSXAttribute(nodePath) {
+      const { name, value, loc } = nodePath.node;
+      if (name.type !== "JSXIdentifier" || name.name !== "i18nKey") return;
+      const literal =
+        value?.type === "JSXExpressionContainer" ? value.expression : value;
+      if (literal?.type !== "StringLiteral") return;
+      usedKeys.push({
+        key: literal.value,
+        file: relPath,
+        line: loc?.start.line ?? 0,
+        column: loc?.start.column ?? 0,
+      });
+    },
+
     CallExpression(nodePath) {
       const { node } = nodePath;
       const { callee, arguments: args } = node;
@@ -64,12 +109,13 @@ export function extractKeysFromFile(filePath: string, cwd: string): UsedKey[] {
       if (
         callee.type === "MemberExpression" &&
         callee.property.type === "Identifier" &&
-        T_METHOD_NAMES.has(callee.property.name)
+        T_METHOD_NAMES.has(callee.property.name) &&
+        callee.object.type === "Identifier" &&
+        T_OBJECT_NAMES.has(callee.object.name)
       ) {
         isTranslationCall = true;
       }
 
-      // ── Pattern 2: intl.formatMessage({ id: 'key' }) ───────────────────
       if (
         callee.type === "MemberExpression" &&
         callee.property.type === "Identifier" &&
@@ -103,21 +149,29 @@ export function extractKeysFromFile(filePath: string, cwd: string): UsedKey[] {
 
       if (!isTranslationCall) return;
 
-      // Extract the key — must be a static string literal
       const firstArg = args[0];
       if (!firstArg) return;
 
-      if (firstArg.type === "StringLiteral") {
-        // t('some.key') ✅
+      const staticKey =
+        firstArg.type === "StringLiteral"
+          ? firstArg.value
+          : firstArg.type === "TemplateLiteral" &&
+              firstArg.expressions.length === 0
+            ? firstArg.quasis[0].value.cooked
+            : null;
+
+      if (staticKey != null) {
+        const prefix =
+          callee.type === "Identifier"
+            ? resolveNamespacePrefix(nodePath.scope, callee.name, hooks)
+            : "";
         usedKeys.push({
-          key: firstArg.value,
+          key: prefix + staticKey,
           file: relPath,
           line: node.loc?.start.line ?? 0,
           column: node.loc?.start.column ?? 0,
         });
       }
-      // Template literals like t(`key.${x}`) are intentionally ignored
-      // because they can't be statically resolved.
     },
   });
 

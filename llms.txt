@@ -1,0 +1,39 @@
+# locale-lint
+
+> Zero-config i18n linter for React Native, React & Next.js. Cross-references your
+> source code against locale files to catch missing, extra, unused, and undefined
+> translation keys, hardcoded strings, and interpolation mismatches. Runs in CI,
+> no ESLint setup, not tied to one i18n library.
+
+Install: `npm install --save-dev locale-lint` — or run directly with `npx locale-lint check`.
+
+## Commands
+
+- `npx locale-lint check`: run all checks (human-readable).
+- `npx locale-lint check --json`: machine-readable output for CI/agents.
+- `npx locale-lint init`: scaffold `locale-lint.config.json`.
+
+Flags: `--src <dir>`, `--locales <dir>`, `--base <locale>`, `--ignore-unused`,
+`--ignore-hardcoded`, `--json`.
+
+Exit codes: `0` clean, `1` issues found, `2` fatal error.
+
+## Docs
+
+- [README](README.md): full usage, config, library support, comparison vs alternatives.
+- [AGENTS.md](AGENTS.md): when to run it, exit codes, and the `--json` output schema.
+- [CHANGELOG](CHANGELOG.md): version history and migration notes.
+
+## Checks
+
+- Missing keys (in base, absent from a target locale)
+- Extra keys (in a target locale, absent from base)
+- Undefined keys (used in code, defined nowhere)
+- Unused keys (defined, never used in code)
+- Hardcoded strings (raw UI text not run through `t()`)
+- Interpolation mismatches (variable sets differ across locales)
+
+## Supported
+
+react-i18next, next-intl (namespace-aware), i18next, i18n-js, react-intl/FormatJS,
+vue-i18n. Locale formats: flat JSON, namespaced JSON dirs, TypeScript/JS modules.

@@ -1,7 +1,8 @@
 import path from "path";
 import chalk from "chalk";
 import type { LocaleLintConfig, LintResult } from "../types/index";
-import { scanFiles } from "./scanFiles";
+import { scanFiles, relativePath } from "./scanFiles";
+import { parseSource } from "./parseSource";
 import { extractKeysFromFile, deduplicateKeys } from "./extractKeys";
 import { detectHardcodedStrings } from "./detectHardcoded";
 import { loadLocales } from "./loadLocales";
@@ -55,17 +56,20 @@ export async function runLint(
   const sourceFiles = scanFiles(config, cwd);
   const allUsedKeys = [];
   const allHardcoded = [];
+  const skippedFiles: string[] = [];
 
   for (const file of sourceFiles) {
-    const keys = extractKeysFromFile(file, cwd);
-    allUsedKeys.push(...keys);
-
-    const hardcoded = detectHardcodedStrings(
-      file,
-      cwd,
-      config.minHardcodedLength,
+    const ast = parseSource(file);
+    if (!ast) {
+      skippedFiles.push(relativePath(file, cwd));
+      continue;
+    }
+    allUsedKeys.push(
+      ...extractKeysFromFile(file, cwd, config.namespaceHooks, ast),
     );
-    allHardcoded.push(...hardcoded);
+    allHardcoded.push(
+      ...detectHardcodedStrings(file, cwd, config.minHardcodedLength, ast),
+    );
   }
 
   const usedKeysMap = deduplicateKeys(allUsedKeys);
@@ -75,8 +79,16 @@ export async function runLint(
   }
 
   // Step 3: Compare locales
-  const { missingKeys, unusedKeys, undefinedKeys, interpolationMismatches } =
-    compareLocales(locales, usedKeysMap, config.baseLocale);
+  const {
+    missingKeys,
+    extraKeys,
+    unusedKeys,
+    undefinedKeys,
+    interpolationMismatches,
+  } = compareLocales(locales, usedKeysMap, config.baseLocale, {
+    undefinedKeyResolution: config.undefinedKeyResolution,
+    namespaceAgnosticFiles: config.namespaceAgnosticFiles,
+  });
 
   const filteredUnusedKeys = unusedKeys.filter(
     (k) => !config.ignoreKeys.includes(k),
@@ -92,12 +104,14 @@ export async function runLint(
 
   return {
     missingKeys,
+    extraKeys,
     unusedKeys: filteredUnusedKeys,
     undefinedKeys: filteredUndefinedKeys,
     hardcodedStrings: allHardcoded,
     interpolationMismatches,
     meta: {
-      filesScanned: sourceFiles.length,
+      filesScanned: sourceFiles.length - skippedFiles.length,
+      skippedFiles,
       localesFound: locales.map((l) => l.locale),
       totalKeys,
       durationMs: Date.now() - startTime,
@@ -112,6 +126,7 @@ export async function runLint(
 export function hasIssues(result: LintResult): boolean {
   return (
     Object.values(result.missingKeys).some((v) => v.length > 0) ||
+    Object.values(result.extraKeys).some((v) => v.length > 0) ||
     result.unusedKeys.length > 0 ||
     result.undefinedKeys.length > 0 ||
     result.hardcodedStrings.length > 0 ||

@@ -1,7 +1,7 @@
 {
   "name": "locale-lint",
-  "version": "1.0.3",
-  "description": "Zero-config i18n linter for React, React Native & Next.js — detects missing, unused, undefined keys and hardcoded strings",
+  "version": "2.0.0",
+  "description": "Zero-config i18n linter for React Native, React & Next.js — cross-references your code against locale files to catch missing, unused, undefined keys and hardcoded strings. Runs in CI, no ESLint setup.",
   "main": "dist/cli.js",
   "bin": {
     "locale-lint": "./dist/cli.js"
@@ -9,13 +9,20 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md",
+    "AGENTS.md",
+    "llms.txt"
   ],
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",
     "dev": "ts-node src/cli.ts",
     "check": "ts-node src/cli.ts check",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "prepare": "husky",
     "lint": "ts-node src/cli.ts check --src example/src --locales example/locales"
   },
   "keywords": [
@@ -23,11 +30,18 @@
     "internationalization",
     "localization",
     "lint",
+    "linter",
+    "i18n-lint",
     "translation",
+    "cli",
     "react",
     "react-native",
     "nextjs",
+    "next-intl",
     "i18next",
+    "react-intl",
+    "formatjs",
+    "vue-i18n",
     "missing-keys",
     "unused-keys",
     "hardcoded-strings"
@@ -38,6 +52,10 @@
     "type": "git",
     "url": "https://github.com/francisojeah/locale-lint"
   },
+  "homepage": "https://github.com/francisojeah/locale-lint#readme",
+  "bugs": {
+    "url": "https://github.com/francisojeah/locale-lint/issues"
+  },
   "engines": {
     "node": ">=16.0.0"
   },
@@ -47,11 +65,15 @@
     "@babel/types": "^7.23.0",
     "chalk": "^4.1.2",
     "commander": "^11.1.0",
-    "glob": "^10.3.10"
+    "glob": "^10.3.10",
+    "minimatch": "^9.0.5"
   },
   "devDependencies": {
     "@types/babel__traverse": "^7.20.4",
     "@types/node": "^20.10.0",
+    "husky": "^9.1.7",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.2"
   }
