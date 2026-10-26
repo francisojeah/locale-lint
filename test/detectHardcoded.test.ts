@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "@jest/globals";
 import path from "path";
 import { detectHardcodedStrings } from "../src/core/detectHardcoded";
 

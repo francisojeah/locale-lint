@@ -4,6 +4,12 @@ node_modules/
 # build output
 dist/
 
+# test coverage
+coverage/
+
+# husky internals
+.husky/_/
+
 # logs
 *.log
 

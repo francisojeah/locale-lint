@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "@jest/globals";
 import { compareLocales } from "../src/core/compareLocales";
 import type { TranslationFile, UsedKey } from "../src/types/index";
 

@@ -129,7 +129,10 @@ function parseLocaleFile(filePath: string): Record<string, unknown> | null {
     const result = parseJsLocaleFile(filePath);
     if (!result) {
       throw new Error(
-        "could not extract a default-exported translations object",
+        "could not read a translations object from this file. locale-lint reads " +
+          "static object literals (export default {…}, module.exports = {…}); values " +
+          "built from imports, function calls, spreads or template expressions can't be " +
+          "resolved without executing the file. Use a JSON locale or a static object.",
       );
     }
     return result;
@@ -181,6 +184,22 @@ function extractViaAst(content: string): Record<string, unknown> | null {
         }
       }
 
+      // module.exports = { ... } or module.exports = x (CommonJS)
+      if (
+        node.type === "ExpressionStatement" &&
+        node.expression.type === "AssignmentExpression" &&
+        isModuleExports(node.expression.left)
+      ) {
+        const right = unwrapTS(node.expression.right);
+        if (right.type === "ObjectExpression") {
+          defaultExportObj = objectExpressionToPlain(right);
+          break;
+        }
+        if (right.type === "Identifier") {
+          defaultExportName = right.name;
+        }
+      }
+
       // const x = { ... } or const x: Type = { ... }
       if (node.type === "VariableDeclaration") {
         for (const decl of node.declarations) {
@@ -198,11 +217,21 @@ function extractViaAst(content: string): Record<string, unknown> | null {
       return variableMap.get(defaultExportName)!;
     }
   } catch {
-    // AST parse failed — try simple regex as last resort
-    return extractObjectLiteralFallback(content);
+    return null; // unparseable → fail loud upstream, don't guess
   }
 
-  return extractObjectLiteralFallback(content);
+  return null;
+}
+
+/** True for `module.exports` or bare `exports` assignment targets. */
+function isModuleExports(left: any): boolean {
+  if (left?.type !== "MemberExpression") return false;
+  return (
+    left.object?.type === "Identifier" &&
+    left.object.name === "module" &&
+    left.property?.type === "Identifier" &&
+    left.property.name === "exports"
+  );
 }
 
 /** Unwraps `x as const` / `x satisfies T` so the inner expression is reached. */
@@ -269,28 +298,4 @@ function objectExpressionToPlain(node: {
   }
 
   return Object.keys(result).length > 0 ? result : null;
-}
-
-/**
- * Last-resort regex fallback for very simple translation files.
- * Works reliably when the file is plain key: "value" pairs.
- */
-function extractObjectLiteralFallback(
-  content: string,
-): Record<string, unknown> | null {
-  const match = content.match(
-    /(?:export\s+default|module\.exports\s*=)\s*(\{[\s\S]*\})\s*(?:as\s+const|satisfies\s+\w+)?\s*;?\s*$/,
-  );
-  if (!match) return null;
-
-  try {
-    const jsonLike = match[1]
-      .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // quote bare keys
-      .replace(/,\s*([}\]])/g, "$1") // trailing commas
-      .replace(/:\s*`([^`]*)`/g, ': "$1"') // template literals → strings
-      .replace(/'/g, '"'); // single → double quotes
-    return JSON.parse(jsonLike);
-  } catch {
-    return null;
-  }
 }

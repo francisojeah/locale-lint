@@ -39,6 +39,12 @@ major version is bumped.
   and `require()`d a temp `.cjs` file written into your repo — an arbitrary-code-
   execution risk that could also leak a temp file if the process was killed. Locale
   files are now parsed without ever executing them.
+  *Migration:* the loader reads **static object literals** (`export default {…}`,
+  `module.exports = {…}`, named-const exports, `as const`, `satisfies`). Values built
+  at runtime — spreads of imported objects, function calls, or template expressions
+  like `` `Hi ${brand}` `` — can no longer be resolved and will fail with a clear
+  error. Convert such locales to JSON or a static object. (Plain JSON locales are
+  unaffected.)
 - **Interpolation comparison is ICU-aware** (`{count, plural, ...}`) and compares
   variables as sets, eliminating false mismatches.
 - **`obj.t('key')` is only treated as a translation call for known i18n objects**
@@ -49,6 +55,11 @@ major version is bumped.
 
 - A JSON locale that isn't an object (a top-level array or primitive) now fails loudly
   instead of producing garbage numeric/per-character keys.
+- A syntactically broken TS/JS locale now fails loudly instead of silently guessing a
+  partial object via a lossy regex fallback (the fallback was removed).
+- Array-valued translations are indexed (`key.0`, `key.1`) instead of being joined into a
+  single comma-separated string.
+- An unterminated `{` no longer invents a phantom interpolation variable.
 - `locale-lint init` reports a friendly error (exit 2) if the config can't be written.
 - `namespaceAgnosticFiles` globs match cross-platform (Windows path separators, leading `./`).
 - `--version` now reports the real package version.

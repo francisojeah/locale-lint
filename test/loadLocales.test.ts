@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "@jest/globals";
 import path from "path";
 import { loadLocales } from "../src/core/loadLocales";
 
@@ -32,6 +32,12 @@ describe("loadLocales", () => {
     expect(en.keys["nested.deep"]).toBe("value");
   });
 
+  it("parses CommonJS `module.exports = {…}` locales", () => {
+    const en = loadLocales(fx("commonjs")).find((l) => l.locale === "en")!;
+    expect(en.keys["home.title"]).toBe("Welcome");
+    expect(en.keys["common.ok"]).toBe("OK");
+  });
+
   it("throws on a malformed locale instead of skipping it silently", () => {
     expect(() => loadLocales(fx("malformed"))).toThrow(/Could not parse/);
   });
@@ -42,5 +48,9 @@ describe("loadLocales", () => {
 
   it("rejects a JSON locale that isn't an object (array/primitive)", () => {
     expect(() => loadLocales(fx("non-object"))).toThrow(/Could not parse/);
+  });
+
+  it("fails loud on a syntactically broken TS locale (no silent guess)", () => {
+    expect(() => loadLocales(fx("malformed-ts"))).toThrow(/Could not parse/);
   });
 });

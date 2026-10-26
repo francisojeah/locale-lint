@@ -13,10 +13,18 @@ export function flattenObject(
   for (const [key, value] of Object.entries(obj)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
 
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    if (Array.isArray(value)) {
+      value.forEach((item, idx) => {
+        const itemKey = `${fullKey}.${idx}`;
+        if (item !== null && typeof item === "object") {
+          flattenObject(item as Record<string, unknown>, itemKey, result);
+        } else {
+          result[itemKey] = String(item ?? "");
+        }
+      });
+    } else if (value !== null && typeof value === "object") {
       flattenObject(value as Record<string, unknown>, fullKey, result);
     } else {
-      // Store string values; coerce numbers/booleans to string
       result[fullKey] = String(value ?? "");
     }
   }
@@ -37,12 +45,14 @@ export function extractInterpolationVars(str: string): string[] {
 
   for (let i = 0; i < str.length; i++) {
     if (str[i] !== "{") continue;
-    const { inner, end } = readBraceBlock(str, i);
+    const { inner, end, closed } = readBraceBlock(str, i);
+    if (!closed) break; // unterminated brace — don't invent a variable
 
     const icu = inner.match(ICU_ARG);
     if (icu) {
+      // Skip option bodies: they're translated text, not variables.
       vars.add(icu[1]);
-      i = end; // skip the whole ICU block, including option bodies
+      i = end;
       continue;
     }
 
@@ -63,14 +73,17 @@ export function extractInterpolationVars(str: string): string[] {
   return Array.from(vars).sort();
 }
 
-/** Reads a balanced `{...}` block starting at `start`, returning inner text and end index. */
-function readBraceBlock(str: string, start: number): { inner: string; end: number } {
+/** Reads a balanced `{...}` block starting at `start`. `closed` is false if unterminated. */
+function readBraceBlock(
+  str: string,
+  start: number,
+): { inner: string; end: number; closed: boolean } {
   let depth = 0;
   for (let j = start; j < str.length; j++) {
     if (str[j] === "{") depth++;
     else if (str[j] === "}" && --depth === 0) {
-      return { inner: str.slice(start + 1, j), end: j };
+      return { inner: str.slice(start + 1, j), end: j, closed: true };
     }
   }
-  return { inner: str.slice(start + 1), end: str.length - 1 };
+  return { inner: str.slice(start + 1), end: str.length - 1, closed: false };
 }

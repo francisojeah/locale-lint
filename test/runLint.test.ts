@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "@jest/globals";
 import path from "path";
 import { runLint, hasIssues } from "../src/core/runner";
 import type { LocaleLintConfig } from "../src/types/index";
@@ -13,6 +13,9 @@ const config: LocaleLintConfig = {
   minHardcodedLength: 3,
   ignoreKeys: [],
   exclude: ["node_modules"],
+  namespaceHooks: ["useTranslations", "getTranslations"],
+  undefinedKeyResolution: "suffix",
+  namespaceAgnosticFiles: [],
 };
 
 describe("runLint (end to end)", () => {
