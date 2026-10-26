@@ -23,26 +23,54 @@ export function flattenObject(
   return result;
 }
 
+const ICU_ARG = /^\s*(\w+)\s*,\s*(?:plural|selectordinal|select|number|date|time)\b/;
+
 /**
- * Extracts interpolation variable names from a translation string.
- * Supports both {{var}} (i18next) and {var} (FormatJS/react-intl) styles.
- *
- * Example:
- *   "Hello {{name}}, you have {count} messages" → ["name", "count"]
+ * Extracts interpolation variable names from a translation string, covering
+ * {{var}} (i18next), {var} (FormatJS), and ICU {var, plural|select|...} forms.
+ * ICU option bodies (e.g. `other {# items}`) are skipped so their translated
+ * text isn't mistaken for variables. Returns a de-duplicated, sorted list for
+ * set comparison between locales.
  */
 export function extractInterpolationVars(str: string): string[] {
-  const vars: string[] = [];
+  const vars = new Set<string>();
 
-  // Match {{var}} style (i18next, i18n-js)
-  const doubleBrace = str.matchAll(/\{\{(\w+)\}\}/g);
-  for (const match of doubleBrace) vars.push(match[1]);
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] !== "{") continue;
+    const { inner, end } = readBraceBlock(str, i);
 
-  // Match {var} style (FormatJS / react-intl)
-  const singleBrace = str.matchAll(/\{(\w+)\}/g);
-  for (const match of singleBrace) {
-    // Avoid duplicates (in case someone mixes styles)
-    if (!vars.includes(match[1])) vars.push(match[1]);
+    const icu = inner.match(ICU_ARG);
+    if (icu) {
+      vars.add(icu[1]);
+      i = end; // skip the whole ICU block, including option bodies
+      continue;
+    }
+
+    const double = inner.match(/^\s*\{\s*(\w+)\s*\}\s*$/); // {{var}}
+    if (double) {
+      vars.add(double[1]);
+      i = end;
+      continue;
+    }
+
+    const single = inner.match(/^\s*(\w+)\s*$/); // {var}
+    if (single) {
+      vars.add(single[1]);
+      i = end;
+    }
   }
 
-  return vars.sort();
+  return Array.from(vars).sort();
+}
+
+/** Reads a balanced `{...}` block starting at `start`, returning inner text and end index. */
+function readBraceBlock(str: string, start: number): { inner: string; end: number } {
+  let depth = 0;
+  for (let j = start; j < str.length; j++) {
+    if (str[j] === "{") depth++;
+    else if (str[j] === "}" && --depth === 0) {
+      return { inner: str.slice(start + 1, j), end: j };
+    }
+  }
+  return { inner: str.slice(start + 1), end: str.length - 1 };
 }

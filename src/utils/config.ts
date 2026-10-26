@@ -2,11 +2,7 @@ import fs from "fs";
 import path from "path";
 import type { LocaleLintConfig } from "../types/index";
 
-const CONFIG_FILES = [
-  "locale-lint.config.json",
-  ".locale-lint.json",
-  "locale-lint.config.js",
-];
+const CONFIG_FILES = ["locale-lint.config.json", ".locale-lint.json"];
 
 /**
  * ORDERING RULE: Children before parents — always.
@@ -106,6 +102,9 @@ export function resolveConfig(
     minHardcodedLength: 3,
     ignoreKeys: [],
     exclude: ["node_modules", "dist", "build", ".next", ".expo", "coverage"],
+    namespaceHooks: ["useTranslations", "getTranslations"],
+    undefinedKeyResolution: "suffix",
+    namespaceAgnosticFiles: [],
   };
 
   let fileConfig: Partial<LocaleLintConfig> = {};
@@ -113,12 +112,12 @@ export function resolveConfig(
     const configPath = path.join(cwd, configFile);
     if (fs.existsSync(configPath)) {
       try {
-        const raw = fs.readFileSync(configPath, "utf-8");
-        fileConfig = JSON.parse(raw);
-        break;
-      } catch {
-        // ignore malformed config
+        fileConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`Invalid ${configFile}: ${message}`);
       }
+      break;
     }
   }
 
@@ -162,25 +161,28 @@ export function resolveConfig(
   };
 }
 
+function isDirectory(p: string): boolean {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function autoDetectDir(cwd: string, candidates: string[]): string | null {
   for (const candidate of candidates) {
     const fullPath = path.join(cwd, candidate);
-    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
-      const entries = fs.readdirSync(fullPath);
-      const hasLocaleContent = entries.some(
-        (e) =>
-          /\.(json|ts|js)$/.test(e) ||
-          fs.statSync(path.join(fullPath, e)).isDirectory(),
+    if (!isDirectory(fullPath)) continue;
+    const hasLocaleContent = fs
+      .readdirSync(fullPath)
+      .some(
+        (e) => /\.(json|ts|js)$/.test(e) || isDirectory(path.join(fullPath, e)),
       );
-      if (hasLocaleContent) return candidate;
-    }
+    if (hasLocaleContent) return candidate;
   }
   return null;
 }
 
 function autoDetectDirs(cwd: string, candidates: string[]): string[] {
-  return candidates.filter((c) => {
-    const fullPath = path.join(cwd, c);
-    return fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory();
-  });
+  return candidates.filter((c) => isDirectory(path.join(cwd, c)));
 }

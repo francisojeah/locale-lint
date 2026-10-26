@@ -59,13 +59,6 @@ export function detectHardcodedStrings(
   cwd: string,
   minLength = 3,
 ): HardcodedString[] {
-  // Only scan JSX files — skip plain .ts/.js without JSX
-  const ext = filePath.split(".").pop() ?? "";
-  if (!["jsx", "tsx"].includes(ext)) {
-    // Still scan .js and .ts — many RN projects use .js for JSX
-    // We'll just parse and see if any JSX nodes exist
-  }
-
   const source = fs.readFileSync(filePath, "utf-8");
   const found: HardcodedString[] = [];
   const relPath = relativePath(filePath, cwd);

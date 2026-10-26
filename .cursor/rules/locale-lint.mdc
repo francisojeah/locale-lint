@@ -1,0 +1,14 @@
+---
+description: Use locale-lint to check i18n when touching translations
+alwaysApply: false
+---
+
+When adding, removing, or renaming translation keys, or before shipping a locale,
+run `npx locale-lint check --json` and resolve what it reports.
+
+- Exit `1` = issues found; `2` = fatal (fix the named file or pass `--src`/`--locales`).
+- Fix `undefinedKeys` (key used in code, defined nowhere) and `missingKeys`
+  (absent from a target locale) before considering the change done.
+- Wrap any reported `hardcodedStrings` in the project's `t()`.
+
+See AGENTS.md for the full `--json` schema and how to act on each field.
