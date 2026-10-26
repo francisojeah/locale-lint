@@ -1,8 +1,6 @@
 [![npm version](https://img.shields.io/npm/v/locale-lint.svg?style=flat-square)](https://www.npmjs.com/package/locale-lint)
-[![npm downloads](https://img.shields.io/npm/dm/locale-lint.svg?style=flat-square)](https://www.npmjs.com/package/locale-lint)
 [![CI](https://img.shields.io/github/actions/workflow/status/francisojeah/locale-lint/ci.yml?branch=main&style=flat-square)](https://github.com/francisojeah/locale-lint/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 
 # locale-lint
 
@@ -49,8 +47,6 @@ npx locale-lint check
   ────────────────────────────────────────────────────────
   21 issues found in 123ms
 ```
-
-<img width="1280" height="775" alt="locale-lint terminal output" src="https://github.com/user-attachments/assets/91912d86-757f-4116-95db-97dd5597fd3b" />
 
 ---
 
